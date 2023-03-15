@@ -1,0 +1,10 @@
+high_res: true
+mode: radio
+source_id: onyourwave
+station_settings:
+  onyourwave:
+    diversity: discover
+    language: without-words
+    mood_energy: calm
+token: ----
+volume: 1.0
