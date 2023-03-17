@@ -2,14 +2,14 @@
 import asyncio
 import logging
 from random import random
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 from yandex_music import (
     ClientAsync,
     Dashboard,
     DownloadInfo,
     Restrictions,
+    RotorSettings,
     Sequence,
-    Station,
     StationResult,
     StationTracksResult,
     Track,
@@ -17,6 +17,7 @@ from yandex_music import (
 from yandex_music.exceptions import YandexMusicError
 from player.helpers import aiohttp_retry, YaTrack
 import player.config as cfg
+from player import constants as const
 
 ClientAsync.notice_displayed = True
 
@@ -32,7 +33,7 @@ MY_API_TIMEOUT: float = 2.0
 
 
 
-# logging.getLogger('yandex_music.client_async').setLevel(logging.WARNING)
+#logging.getLogger('yandex_music.client_async').setLevel(logging.WARNING)
 
 
 class StationControllerError(Exception):
@@ -53,23 +54,51 @@ class StationController:
     """
     Controls Yandex.Music radio station
     """
-    def __init__(self, client: ClientAsync, high_res:bool = True):
-        self._high_res: bool = high_res
-        self._client: ClientAsync = client
-
-        self._station: Station = None
+    def __init__(self):
+        self.high_res: bool = cfg.get_key('high_res', True)
+        self.source_id: str = cfg.get_key('source_id', default=const.DEFAULT_SOURCE)
+        self._token: str = cfg.get_key('token')
+        self._client: ClientAsync = None
+        self._sources: List[StationResult] = []
+        self._source: StationResult = None
         self._batch: StationTracksResult = None
         self._batch_index: int = 0
         self._current_play_id: str = None
         self._current_track: Track = None
         self._current_track_int: YaTrack = None
 
-    async def tune_station(self, station_name: str) -> YaTrack:
+    async def init(self):
+        """Initialize Yandex.Music client and populate list of available stations"""
+        self._client = ClientAsync(token=self._token)
+        try:
+            await self._client.init()
+        except YandexMusicError as exc:
+            self._client = None
+            raise StationControllerError(f'Cannot initialize client: {exc}')            # pylint: disable=raise-missing-from
+        self._sources = await self._get_station_list()
+        return self
+
+    async def set_source(
+            self, source_id: str=None,
+            source_settings:RotorSettings=None, played:float=0) -> YaTrack:
         """
-        Starts controller for given station name and returns first track from this station
+        Tunes to given station name, applies station settings (if any) 
+        and returns first track from this station
         """
-        if not await self._setup_station(station_name):
-            raise StationControllerError(f'No such station: {station_name} in your dashboard.')
+        if self._batch is not None:
+            # Tuning to new station
+            asyncio.create_task(
+                self._inform_playback_ended(
+                    self._current_track, self._current_play_id, self._batch.batch_id, played
+                    )
+            )
+            self._cleanup_current_track()
+        if not self._set_source(source_id or self.source_id):
+            raise StationControllerError(f'No such station: {self.source_id} in rotor\'s stations.')
+        if not await self.apply_source_settings(
+            source_settings or self.get_source_settings(), force=True):
+            _LOGGER.warning(
+                'Failed to apply %s\'s settings.', self._source.station.id.tag)
         _LOGGER.debug('Tuned to %s station.', self._station_id)
 
         await self._start_new_batch()
@@ -90,6 +119,8 @@ class StationController:
         if self._current_track:
             await self._inform_playback_ended(
                 self._current_track, self._current_play_id, self._batch.batch_id, played=played)
+        if self._client:
+            del self._client
         _LOGGER.debug('Shut down.')
 
 
@@ -124,23 +155,44 @@ class StationController:
         """
         return await self._send_track_user_likes_add(self._current_track.id)
 
-    async def apply_settings(
-            self, language:str=None, diversity:str=None, mood_energy:str=None) -> bool:
+    async def apply_source_settings(self, settings: RotorSettings, force: bool = False) -> bool:
         """
-        Apply settings for current station
+        Apply settings for current station and store them to current config
         """
+        # Do nothing if given settings are same as current source settings
+        if not force and self._is_current_settings(settings):
+            return True
         _LOGGER.debug(
             'Apply %s\'s settings: {language="%s", diversity="%s", mood_energy="%s"}.', 
-            self._station.id.tag, language, diversity, mood_energy)
-        if await self._apply_radio_settings(self._station_id,
-            language=language, diversity=diversity, mood_energy=mood_energy):
+            self._source.station.id.tag,
+            settings.language, settings.diversity, settings.mood_energy)
+        if await self._apply_radio_settings(self._station_id, settings):
+            # Store settings to config
+            cfg.set_station_settings(
+                self.source_id,
+                {
+                    'language': settings.language,
+                    'diversity': settings.diversity,
+                    'mood_energy': settings.mood_energy,
+                })
             if self._batch:
                 self._batch_index = len(self._batch.sequence)
             return True
         return False
 
+    def get_sources_list(self) -> List[StationResult]:
+        """Return list of available stations"""
+        return self._sources
+
     ### API wrappers
     # Informers
+    async def _get_station_list(self) -> List[StationResult]:
+        return list(
+            set(
+                await self._get_dashboard_stations() + await self._get_rotor_stations()
+            )
+        )
+
     async def _inform_playback_started(self, track: Track, play_id: str, batch_id: str):
         try:
             await self._send_track_playback_started(track, play_id)
@@ -172,21 +224,14 @@ class StationController:
             _LOGGER.debug('Informed station about start of batch %s.', batch_id)
 
     # Rotor controls
-    async def _setup_station(self, station_name: str) -> bool:
-        dashboard: Dashboard = await self._get_dashboard()
-
-        station_results: List[StationResult] = dashboard.stations
-        result: StationResult = None
-        for result in station_results:
-            station: Station = result.station
-            if station.id.tag == station_name:
-                self._station = station
-                settings: Dict = cfg.get_station_settings(self._station.id.tag)
-                if settings:
-                    if not await self.apply_settings(**settings):
-                        _LOGGER.warning(
-                            'Cannot apply %s\'s settings: %s', self._station.id.tag, settings)
+    def _set_source(self, station_id: str) -> bool:
+        result: StationResult
+        for result in self._sources:
+            if result.station.id.tag == station_id:
+                self._source = result
+                self.source_id = station_id
                 return True
+        return False
 
     async def _start_new_batch(self, queue=None):
         self._batch_index = 0
@@ -200,7 +245,7 @@ class StationController:
         self._current_track_int = YaTrack(
             title=self._current_track.title,
             artist=",".join(self._current_track.artists_name()),
-            uri=await self._get_track_url(self._current_track, high_res=self._high_res),
+            uri=await self._get_track_url(self._current_track, high_res=self.high_res),
             duration=int(self._current_track.duration_ms / 1000),
             is_liked=current_sequence.liked
             )
@@ -222,22 +267,63 @@ class StationController:
     # Helpers
     @property
     def _station_id(self) -> str:
-        return f'{self._station.id.type}:{self._station.id.tag}'
+        return f'{self._source.station.id.type}:{self._source.station.id.tag}'
 
     @property
     def tuned(self) -> bool:
         """Are we tuned to a station?"""
-        return self._station is not None
+        return self._source is not None
 
     @property
-    def station_name(self) -> str:
+    def source_name(self) -> str:
         """Returns the name of currently tuned station"""
-        return self._station.name.strip()
+        return self._source.station.name.strip()
 
-    @property
-    def restrictions(self) -> Restrictions:
-        """Returns the settings restrictions for currently tuned station"""
-        return self._station.restrictions2
+    def get_source_restrictions(self, station_id: str=None) -> Optional[Restrictions]:
+        """
+        When no station_id is set, returns settings restrictions for currently tuned station
+        In opposite case, returns restrictions for given station_id
+        """
+        if not station_id:
+            if self._source and self._source.station.restrictions2:
+                return self._source.station.restrictions2
+            return None
+        for s_r in self._sources:
+            if s_r.station.id.tag == station_id:
+                return s_r.station.restrictions2
+        return None
+
+    def get_source_settings(self, station_id: str=None) -> Optional[RotorSettings]:
+        """
+        When no station_id is set, returns settings for currently tuned station
+        In opposite case, returns settings for given station_id
+        If settings are set in config returns them,
+        else returns default station settings received from rotor
+        """
+        if not station_id:
+            if not self._source:
+                return None
+            cfg_settings: RotorSettings = self._get_cfg_settings(self._source.station.id.tag)
+            if cfg_settings:
+                return cfg_settings
+            return self._source.settings2
+        cfg_settings: RotorSettings = self._get_cfg_settings(station_id)
+        if cfg_settings:
+            return cfg_settings
+        for s_r in self._sources:
+            if s_r.station.id.tag == station_id:
+                return s_r.settings2
+        return None
+
+    @staticmethod
+    def _get_cfg_settings(station_id: str) -> Optional[RotorSettings]:
+        cfg_settings: Dict = cfg.get_station_settings(station_id)
+        if cfg_settings:
+            return RotorSettings(
+                language = cfg_settings.get('language', None),
+                diversity = cfg_settings.get('diversity', None),
+                mood_energy = cfg_settings.get('mood_energy', None))
+        return None
 
     @staticmethod
     def _generate_play_id() -> str:
@@ -245,11 +331,22 @@ class StationController:
             return int(random() * 1000)
         return f'{randint()}-{randint()}-{randint()}'
 
+    def _is_current_settings(self, settings: RotorSettings):
+        curr_settings: RotorSettings = self.get_source_settings()
+        return  settings.language == curr_settings.language and \
+                settings.diversity == curr_settings.diversity and \
+                settings.mood_energy == curr_settings.mood_energy
+
     ### Low-level API methods
     # Rotor controls
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _get_dashboard(self, timeout: float=MY_API_TIMEOUT) -> Dashboard:
-        return await self._client.rotor_stations_dashboard(timeout=timeout)
+    async def _get_dashboard_stations(self, timeout: float=MY_API_TIMEOUT) -> List[StationResult]:
+        dashboard: Dashboard = await self._client.rotor_stations_dashboard(timeout=timeout)
+        return dashboard.stations
+
+    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
+    async def _get_rotor_stations(self, timeout: float=MY_API_TIMEOUT) -> List[StationResult]:
+        return await self._client.rotor_stations_list(timeout=timeout)
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
     async def _get_station_tracks(
@@ -258,17 +355,16 @@ class StationController:
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
     async def _apply_radio_settings(
-        self, station_id: str, language:str=None, diversity:str=None,
-        mood_energy:str=None, timeout: float=MY_API_TIMEOUT) -> bool:
+        self, station_id: str, settings: RotorSettings, timeout: float=MY_API_TIMEOUT) -> bool:
         return await self._client.rotor_station_settings2(
-            station_id, language=language, diversity=diversity,
-            mood_energy=mood_energy, timeout=timeout)
+            station_id, language=settings.language, diversity=settings.diversity,
+            mood_energy=settings.mood_energy, timeout=timeout)
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
     async def _send_radio_batch_started(self, batch_id: str, timeout: float=MY_API_TIMEOUT):
         await self._client.rotor_station_feedback_radio_started(
             station=self._station_id,
-            from_=self._station.id_for_from,
+            from_=self._source.station.id_for_from,
             batch_id=batch_id,
             timeout=timeout
         )

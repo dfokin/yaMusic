@@ -66,7 +66,7 @@ TYPE_STATE          : int = 2
 TYPE_TAGS           : int = 3
 TYPE_ATF            : int = 4
 TYPE_RESIZE         : int = 5
-TYPE_SETTINGS       : int = 6
+TYPE_SOURCE_UPD     : int = 6
 TYPE_STATUS         : int = 7
 
 TYPE_TO_STR :Dict[int, str] = {

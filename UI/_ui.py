@@ -10,7 +10,7 @@ from typing import Dict
 from aioprocessing import AioQueue
 
 import player.constants as const
-import player.config as cfg
+# import player.config as cfg
 from player.yamusic import YaPlayer, YaPlayerError
 
 from ._display_frame import  DisplayFrame
@@ -67,15 +67,9 @@ class UI(tk.Tk):
         """
         self._status_task = asyncio.create_task(self._show_status_task())
         try:
-            self._player = await YaPlayer(
-                self._ui_events,
-                token=cfg.get_key('token'),
-                high_res=cfg.get_key('high_res', True),
-                mode=cfg.get_key('mode', default=const.DEFAULT_MODE),
-                source=cfg.get_key('source_id', default=const.DEFAULT_SOURCE),
-                ).init()
-            await self._set_default_volume()
-            await self._player.start_player()
+            self._player = await YaPlayer(self._ui_events).init()
+            await self._player.start()
+            self._set_volume_from_player()
         except YaPlayerError as exc:
             msg: str = 'Cannot start radio: %s. Shutting down.', str(exc)
             self._to_status(msg)
@@ -94,7 +88,6 @@ class UI(tk.Tk):
     async def _shutdown(self):
         await self._to_status('Shutting down UI...')
         if self._player:
-            self._save_state()
             await self._player.shutdown()
         if self._progress_task:
             self._progress_task.cancel()
@@ -128,17 +121,8 @@ class UI(tk.Tk):
             mode = self._player.mode_state
         self._display_frame.set_status(f'{mode} {status}')
 
-    def _save_state(self):
-        cfg.set_key('high_res', self._player.high_res)
-        cfg.set_key('mode', self._player.mode)
-        cfg.set_key('volume', self._player.volume)
-        cfg.set_key('source_id', self._player.source_id)
-        cfg.save()
-
-    async def _set_default_volume(self):
-        volume: int = int(cfg.get_key('volume', default=0.5) * 10)
-        self._volume.set_volume(volume)
-        await self._player.set_volume(self._volume.volume / 10)
+    def _set_volume_from_player(self):
+        self._volume.set_volume(self._player.volume * 10)
 
     async def _vol_up(self) -> None:
         self._volume.set_volume(self._volume.volume + 1)
@@ -166,10 +150,10 @@ class UI(tk.Tk):
             await self._player.get_next_track()
         elif event_type == const.TYPE_STATUS:
             await self._to_status(event.get('status', 'Unknown'))
-        elif event_type == const.TYPE_SETTINGS:
+        elif event_type == const.TYPE_SOURCE_UPD:
             if event.get('settings', None):
                 _LOGGER.debug('New player settings: %s', event['settings'])
-                await self._player.apply_settings(event['settings'])
+                await self._player.apply_source_settings(event['settings'])
 
     async def _handle_keypress(self, keycode: int) -> None:
         _LOGGER.debug('keycode="%s"', keycode)

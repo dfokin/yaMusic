@@ -92,7 +92,7 @@ class VolumeLabel(Label):
 
     def set_volume(self, value: int) -> None:
         """Set current value. Minimum is 0, maximum is 10"""
-        self.volume = min(value, self._max)
+        self.volume = min(int(value), self._max)
         self.volume = max(self.volume, self._min)
         self._update()
 

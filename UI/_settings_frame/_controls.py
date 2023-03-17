@@ -1,31 +1,30 @@
 """STUB"""
 import logging
-from tkinter.ttk import Button, Combobox
+from tkinter.ttk import Button, Combobox, Label
 from typing import Dict, Optional, List
 
-from yandex_music import Enum
+from yandex_music import Value
 
 from UI._styling import main_font
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class EnumCombobox(Combobox):
+class ValCombobox(Combobox):
     """
-    Combobox for yamusic Enum: selects option by name and returns its value
+    Combobox for List of yamusic Values: selects an option by name and returns its value
     """
-    def __init__(self, master, enum: Enum, preselect: str=None, **kwargs):
-        self.dict: Dict[str, str] = {val.name: val.value for val in enum.possible_values}
-        keys: List[str] = list(self.dict.keys())
-        vals: List[str] = list(self.dict.values())
+    def __init__(self, master, values_list: List[Value], preselect: str=None, **kwargs):
+        self.dict: Dict[str, str] = {val.name: val.value for val in values_list}
+        keys: List[str] = sorted(list(self.dict.keys()))
         super().__init__(
             master, values=keys,
             style='ComboBox.TCombobox', font=main_font, **kwargs)
         if preselect:
             try:
-                self._preselect(vals.index(preselect))
+                self._preselect(preselect)
             except ValueError:
-                _LOGGER.warning('%s: No such item: %s', enum.name, preselect)
+                _LOGGER.warning('ValCombobox: Cannot preselect value: %s', preselect)
 
     def get(self) -> Optional[str]:
         """
@@ -33,11 +32,9 @@ class EnumCombobox(Combobox):
         """
         return self.dict.get(super().get(), None)
 
-    def _preselect(self, index: int):
-        """
-        preselect given value
-        """
-        self.current(index)
+    def _preselect(self, value: str) -> None:
+        name = [k for k, v in self.dict.items() if v == value][0]
+        self.current(list(self['values']).index(name))
 
 class SettingsButton(Button):
     """
@@ -46,3 +43,10 @@ class SettingsButton(Button):
     def __init__(self, *args, **kwargs):
         super().__init__(*args,  style='SettingsButton.TButton', **kwargs)
         self.bind('<Return>', lambda _: self.invoke())
+
+class ColonLabel(Label):
+    """
+    Ordinary label, but with custom style and colon with space is added after the text
+    """
+    def __init__(self, *args, text: str = "", **kwargs):
+        super().__init__(*args,  text=f'{text}: ', style='SettingsLabel.TLabel', **kwargs)

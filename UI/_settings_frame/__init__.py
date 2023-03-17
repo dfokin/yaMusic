@@ -1,11 +1,11 @@
 """STUB"""
 from tkinter.ttk import  LabelFrame
-from typing import Dict, Tuple
+from typing import Tuple
 
 from aioprocessing import AioQueue
 
 import player.constants as const
-from player.yamusic import YaPlayer
+from player.yamusic import YaPlayer, RotorSettings
 
 from UI._styling import padding
 from ._controls import SettingsButton
@@ -40,9 +40,9 @@ class SettingsFrame(LabelFrame):
         self._pane.focus_set()
 
     def _apply_settings(self) -> None:
-        settings: Dict[str, str] = self._pane.get_updated_settings()
+        settings: Tuple[str, RotorSettings] = self._pane.get_updated_settings()
         if settings:
-            self._queue.put({'type': const.TYPE_SETTINGS, 'settings': settings})
+            self._queue.put({'type': const.TYPE_SOURCE_UPD, 'settings': settings})
         self.hide()
 
     def hide(self) -> None:

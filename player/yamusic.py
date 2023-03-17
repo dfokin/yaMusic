@@ -1,35 +1,20 @@
 """Plays media from Yandex.Music using embedded Gstreamer pipeline"""
 import logging
-from typing import Dict
+from typing import Optional, List, Tuple
 
 from aioprocessing import AioManager, AioQueue, AioProcess
-from yandex_music import ClientAsync, Restrictions
-from yandex_music.exceptions import YandexMusicError
+from yandex_music import Restrictions, RotorSettings, StationResult
 
-from player.gst import GstPlayer
-from player.helpers import aiohttp_retry, YaTrack
+import player.config as cfg
 import player.constants as const
 from player.controllers.station import StationController, StationControllerError
+from player.gst import GstPlayer
+from player.helpers import YaTrack
 
 _LOGGER = logging.getLogger(__name__)
 
-_MY_API_RETRIES: int = 3
-_MY_API_RETRY_DELAY: int = 0.3
-_MY_API_TIMEOUT: float = 2.0
-
 class YaPlayerError(Exception):
     """General Yandex.Music player error"""
-
-_RETRY_ARGS = [
-    YandexMusicError,
-    YaPlayerError,
-    ]
-_RETRY_KWARGS = {
-    'num_tries': _MY_API_RETRIES,
-    'timeout': _MY_API_TIMEOUT,
-    'retry_delay': _MY_API_RETRY_DELAY,
-    'logger': _LOGGER,
-    }
 
 class YaPlayer:
     """
@@ -40,13 +25,7 @@ class YaPlayer:
         Messages from player will be passed to user via ui_event_queue.
 
     """
-    def __init__(self, 
-                 ui_event_queue: AioQueue,
-                 mode:str = const.DEFAULT_MODE,
-                 source:str = const.DEFAULT_SOURCE,
-                 high_res: bool = True,
-                 token: str = None
-                 ):
+    def __init__(self, ui_event_queue: AioQueue):
         self._dashboard: AioManager = AioManager().dict({
             const.ATTR_STATE: None,
             const.ATTR_DURATION: None,
@@ -56,78 +35,93 @@ class YaPlayer:
             const.ATTR_ERROR: None,
             const.ATTR_URI: None
         })
-        self.mode: str = mode
-        self.high_res: str = high_res
-        self.source_id: str = source
-        self._token = token
-        self._client: ClientAsync = ClientAsync(token=self._token)
+        self.mode: str = cfg.get_key('mode', default=const.DEFAULT_MODE)
         self._command_queue: AioQueue = AioQueue()
         self._media_queue: AioQueue = AioQueue()
         self._ui_event_queue: AioQueue = ui_event_queue
         self._controller: StationController = None
-        self._gstreamer: AioProcess = AioProcess(
-            target=GstPlayer(
-                self._dashboard, self._command_queue,
-                self._media_queue, ui_event_queue
-                ).run
-            )
+        self._gstreamer: AioProcess = None
 
     async def init(self):
         """
-        Initialize YaMusicPlayer.
-        Creates API client, which is used to get tracks
+        Initialize underlying controller.
         """
-        await self._emit_status_event("Initializing client...")
+        await self._emit_status_event("Starting controller")
         try:
-            await self._init_client()
+            if self.mode == const.MODE_RADIO:
+                self._controller = await StationController().init()
             return self
-        except YandexMusicError as exc:
-            if self._client:
-                del self._client
-                self._client = None
-            raise YaPlayerError(f'Cannot initialize client: {exc}')         # pylint: disable=raise-missing-from
+        except StationControllerError as exc:
+            raise YaPlayerError(f'Cannot start controller: {exc}')               # pylint: disable=raise-missing-from
+
+    async def start(self) -> YaTrack:
+        """
+        Retrieve first track from controller and start playback
+        """
+        self._gstreamer = AioProcess(
+            target=GstPlayer(
+                self._dashboard, self._command_queue,
+                self._media_queue, self._ui_event_queue
+                ).run
+            )
+        _LOGGER.debug('Started GstPlayer as PID %s', self._gstreamer.pid)        # pylint: disable=no-member
+        try:
+            track: YaTrack = await self._controller.set_source()
+        except StationControllerError as exc:
+            raise YaPlayerError(f'Cannot start: {exc}')                         # pylint: disable=raise-missing-from
+        await self._set_title(str(track))
+        await self._enqueue(track.uri)
+        self._gstreamer.start()                                                 # pylint: disable=no-member
+        await self.set_volume(cfg.get_key('volume', default=0.5))
 
     async def shutdown(self):
         """Shut down Gstreamer and controller."""
-        await self._emit_status_event("Shutting dow...")
+        await self._emit_status_event("Shutting down")
+        self._save_state()
         if self._controller:
             await self._controller.shutdown(played=self.position)
             del self._controller
-        if self._client:
-            del self._client
         if self._gstreamer.pid:                                                 # pylint: disable=no-member
             await self._gs_command(const.CMD_SHUTDOWN)
             await self._gstreamer.coro_join()                                   # pylint: disable=no-member
             del self._gstreamer
 
-    async def start_player(self) -> YaTrack:
-        """
-        Creates Controller for given mode, and retrieves first track to play
-        """
-        try:
-            if self.mode == const.MODE_RADIO:
-                await self._emit_status_event("Starting...")
-                self._controller = StationController(self._client, high_res=self.high_res)
-                track: YaTrack = await self._controller.tune_station(self.source_id)
-        except StationControllerError as exc:
-            raise YaPlayerError(f'Cannot start: {exc}')              # pylint: disable=raise-missing-from
-        await self._set_title(str(track))
-        await self._enqueue(track.uri)
-        self._gstreamer.start()                                                 # pylint: disable=no-member
-        _LOGGER.info('Started GstPlayer as PID %s', self._gstreamer.pid)        # pylint: disable=no-member
+    def get_sources_list(self) -> Optional[List[StationResult]]:
+        """Get settings restrictions for active source"""
+        return self._controller.get_sources_list()
 
-    def get_restrictions(self) -> Restrictions:
-        """Get settings restrictions for active controller"""
-        return self._controller.restrictions
+    def get_source_restrictions(self, station_id: str=None) -> Optional[Restrictions]:
+        """Get settings restrictions for active source"""
+        return self._controller.get_source_restrictions(station_id=station_id)
 
-    async def apply_settings(self, settings: Dict[str, str]) -> bool:
+    def get_source_settings(self, station_id: str=None) -> Optional[RotorSettings]:
+        """Get settings for active source"""
+        return self._controller.get_source_settings(station_id=station_id)
+
+    async def apply_source_settings(self, settings: Tuple[str, RotorSettings]) -> bool:
         """Set settings for active controller"""
         await self._emit_status_event("Applying new settings...")
         try:
-            return await self._controller.apply_settings(**settings)
+            if settings[0] == self._controller.source_id:
+                return await self._controller.apply_source_settings(settings[1])
+            return await self._switch_source(settings)
         except StationControllerError as exc:
-            await self._emit_error(f'Cannot apply settings: {exc}.')
-            return
+            await self._emit_error(f'Cannot apply new settings: {exc}.')
+            return False
+
+    async def _switch_source(self, settings: Tuple[str, RotorSettings]) -> bool:
+        s_id, r_s = settings
+        _LOGGER.debug('Switching to new source: %s', s_id)
+        try:
+            track: YaTrack = await self._controller.set_source(
+                source_id=s_id, source_settings=r_s, played=self.position)
+        except StationControllerError as exc:
+            raise YaPlayerError(f'Cannot tune: {exc}')                         # pylint: disable=raise-missing-from
+        await self._set_title(str(track))
+        await self._enqueue(track.uri)
+        await self._gs_command(const.CMD_SKIP)
+        return True
+
 
     async def get_next_track(self):
         """Get next track from controller."""
@@ -153,7 +147,7 @@ class YaPlayer:
         await self._enqueue(track.uri)
         await self._gs_command(const.CMD_SKIP)
 
-    async def like_track(self):
+    async def like_track(self) -> bool:
         """Add track to favorites"""
         await self._emit_status_event("Setting liked track...")
         try:
@@ -191,7 +185,7 @@ class YaPlayer:
         await self._gs_command(const.CMD_SET_VOLUME, volume=volume)
 
     @property
-    def title(self):
+    def title(self) -> str:
         """Get track title tag."""
         return self._dashboard[const.ATTR_TITLE]
 
@@ -199,15 +193,20 @@ class YaPlayer:
     def mode_state(self) -> str:
         """Get current player mode."""
         mode: str = const.MODE_ICONS[self.mode]
-        if self.high_res:
+        if self._controller.high_res:
             mode = f'{mode} {const.HI_RES}'
         if self.mode == const.MODE_RADIO:
             if self._controller and self._controller.tuned:
-                mode = f'{mode} {self._controller.station_name}'
+                mode = f'{mode} {self._controller.source_name}'
         return mode
 
     @property
-    def state(self):
+    def source_id(self) -> str:
+        """Get ID of underlying controller's current source"""
+        return self._controller.source_id
+
+    @property
+    def state(self) -> str:
         """Get state."""
         return self._dashboard[const.ATTR_STATE]
 
@@ -217,12 +216,12 @@ class YaPlayer:
         return self._dashboard[const.ATTR_DURATION]
 
     @property
-    def position(self):
+    def position(self) -> int:
         """Get position."""
         return self._dashboard[const.ATTR_POSITION]
 
     @property
-    def uri(self):
+    def uri(self) -> str:
         """Get URI."""
         return self._dashboard[const.ATTR_URI]
 
@@ -240,6 +239,13 @@ class YaPlayer:
     async def position(self, position):
         """Set position."""
         await self._gs_command(const.CMD_SET_POSITION, position=position)
+
+    def _save_state(self):
+        cfg.set_key('mode', self.mode)
+        cfg.set_key('volume', self.volume)
+        cfg.set_key('source_id', self._controller.source_id)
+        cfg.set_key('high_res', self._controller.high_res)
+        cfg.save()
 
     async def _set_title(self, title: str):
         self._dashboard[const.ATTR_TITLE] = title
@@ -268,9 +274,3 @@ class YaPlayer:
         self._dashboard[const.ATTR_STATE] = const.STATE_ERR
         self._dashboard[const.ATTR_ERROR] = error
         await self._emit_state_event()
-
-    ### Low-level API methods
-    # General methods
-    @aiohttp_retry(*_RETRY_ARGS, **_RETRY_KWARGS)
-    async def _init_client(self, timeout: float=_MY_API_TIMEOUT) -> ClientAsync:
-        return await self._client.init(timeout=timeout)
