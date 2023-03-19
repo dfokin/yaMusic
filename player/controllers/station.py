@@ -33,7 +33,7 @@ MY_API_TIMEOUT: float = 2.0
 
 
 
-#logging.getLogger('yandex_music.client_async').setLevel(logging.WARNING)
+logging.getLogger('yandex_music.client_async').setLevel(logging.WARNING)
 
 
 class StationControllerError(Exception):

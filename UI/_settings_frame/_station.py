@@ -60,7 +60,6 @@ class StationSettingsPane(Frame):
 
         self.bind('<Key>', self._keypress_event)
         self.grid(padx=padding / 2, pady=padding / 2, row=0, columnspan=2)
-        self.update()
 
     def _station_update(self, _):
         station_id: str = self.s_c.get()

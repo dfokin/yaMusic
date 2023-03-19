@@ -4,8 +4,25 @@ Different useful helpers
 from asyncio import sleep
 from functools import wraps
 import logging
+import os
 
-from player.constants import TRACK_LIKE
+from player.constants import TRACK_LIKE, APP_NAME
+
+def touch(path, mode=0o666, exist_ok=True):
+    """Unix-like touch"""
+    if exist_ok:
+        try:
+            os.utime(path, None)
+        except OSError:
+            pass
+        else:
+            return
+    flags = os.O_CREAT | os.O_WRONLY
+    if not exist_ok:
+        flags |= os.O_EXCL
+    with os.open(path, flags, mode):
+        pass
+
 
 def aiohttp_retry(
     to_catch: Exception, to_raise: Exception,
@@ -95,5 +112,5 @@ FMT_STRING = '%(asctime)s [%(levelname)-8s] %(name)-30s: %(message)s'
 stderr_handler = logging.StreamHandler()
 stderr_handler.setFormatter(ColorFormatter(FMT_STRING))
 
-file_handler = logging.FileHandler('player.log')
+file_handler = logging.FileHandler(f'{APP_NAME}.log')
 file_handler.setFormatter(ColorFormatter(FMT_STRING))

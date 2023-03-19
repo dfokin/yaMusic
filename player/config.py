@@ -1,13 +1,12 @@
 """Config file routines"""
 from os import makedirs
 from os.path import join, expanduser, exists, isdir, isfile
-from pathlib import Path
 from typing import Dict, Optional, Union, List
 
 import yaml
 
 from player.constants import APP_NAME, CONFIG_NAME
-
+from player.helpers import touch
 
 CONFIG: Dict = None
 
@@ -30,7 +29,7 @@ if not isdir(_CONFIG_DIR):
 _CONFIG_PATH: str = join(_CONFIG_DIR, CONFIG_NAME)
 
 if not exists(_CONFIG_PATH):
-    Path(_CONFIG_PATH).touch(mode=0o600)
+    touch(_CONFIG_PATH, mode=0o600)
 
 if not isfile(_CONFIG_PATH):
     raise ConfigError(f'{_CONFIG_PATH} is not a file!')
@@ -55,6 +54,10 @@ def get_key(key: str, default=None) -> Optional[Union[int, float, str, Dict, Lis
     """Get config value by key"""
     return CONFIG.get(key, default)
 
+def set_key(key: str, val: Union[int, float, str, Dict, List]) -> None:
+    """Set config value by key"""
+    CONFIG[key] = val
+
 def get_station_settings(station_id: str, default=None) -> Optional[Dict]:
     """Get station settings by its id"""
     if not CONFIG.get('station_settings'):
@@ -66,7 +69,3 @@ def set_station_settings(station_id: str, val: Dict) -> None:
     if not CONFIG['station_settings']:
         CONFIG['station_settings'] = {}
     CONFIG['station_settings'][station_id] = val
-
-def set_key(key: str, val: Union[int, float, str, Dict, List]) -> None:
-    """Set config value by key"""
-    CONFIG[key] = val

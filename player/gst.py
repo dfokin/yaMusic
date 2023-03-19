@@ -3,6 +3,7 @@ Home of GstPlayer
 """
 import logging
 from queue import Empty
+from typing import List
 
 from aioprocessing import AioManager, AioQueue
 import gi                                       # pylint: disable=import-error
@@ -53,6 +54,8 @@ class GstPlayer:
         bus.connect('message::error', self._on_error)
         bus.connect('message::eos', self._on_eos)
         bus.connect('message::state-changed', self._on_state_changed)
+        # Visualizer
+        # self._set_visualizer(self._playbin, 'goom')
         self._loop: GLib.MainLoop = GLib.MainLoop()
         _LOGGER.debug('Created Gstreamer playbin.')
 
@@ -265,3 +268,15 @@ class GstPlayer:
             self._set_own_state(const.STATE_READY)
         elif new == Gst.State.PAUSED:
             self._set_own_state(const.STATE_PAUSED)
+
+    @staticmethod
+    def _set_visualizer(playbin: Gst.Element, name: str):
+        vis_list: List[Gst.ElementFactory] = Gst.Registry.feature_filter(
+            Gst.Registry.get(),
+            lambda e, _: isinstance(e, Gst.ElementFactory) and e.get_klass() == 'Visualization',
+            False,
+            None)
+        for item in vis_list:
+            if item.name == name:
+                playbin.set_property(const.PROP_VIS, Gst.ElementFactory.create(item))
+                playbin.set_property(const.PROP_FLAGS, 0x01+0x02+0x08+0x10+0x200+0x400)
