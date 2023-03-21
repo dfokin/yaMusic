@@ -3,13 +3,11 @@ Implements Yandex.Music client's UI
 """
 import asyncio
 import logging
-from subprocess import Popen
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict
 
 from aioprocessing import AioQueue
-from psutil import Process
 
 import player.constants as const
 # import player.config as cfg
@@ -37,7 +35,6 @@ class UI(tk.Tk):
         self._player: YaPlayer = None
         self._progress_task: asyncio.Task = None
         self._status_task: asyncio.Task = None
-        self._vis: Popen = None
 
         self.minsize(1060, 180)
         self.resizable(False, False)
@@ -89,7 +86,6 @@ class UI(tk.Tk):
 
     async def _shutdown(self):
         await self._to_status('Shutting down UI...')
-        self._kill_vis()
         if self._player:
             await self._player.shutdown()
         if self._progress_task:
@@ -101,21 +97,6 @@ class UI(tk.Tk):
         _LOGGER.debug('UI Loop exit')
         self.shutdown.set_result(True)
 
-
-    def _toggle_vis(self) -> None:
-        if not self._vis:
-            self._vis = Popen(const.VIS_SCRIPT)
-            self.focus_force()
-        else:
-            self._kill_vis()
-
-    def _kill_vis(self):
-        if self._vis:
-            parent: Process = Process(self._vis.pid)
-            for child in parent.children(recursive=True):
-                child.kill()
-            parent.kill()
-            self._vis = None
 
     def _resize_event(self, event: tk.Event) -> None:
         _LOGGER.debug('New size: %dx%d', event.width, event.height)
@@ -202,8 +183,6 @@ class UI(tk.Tk):
             self._toggle_playlist()
         elif keycode == const.KEY_SETTINGS:
             self._toggle_settings()
-        elif keycode == const.KEY_VIS:
-            self._toggle_vis()
         elif keycode == const.KEY_EXIT:
             await self._ui_events.coro_put({"type": const.TYPE_SHUTDOWN})               #pylint: disable=no-member
 

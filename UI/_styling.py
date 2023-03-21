@@ -11,7 +11,7 @@ fgcolor = '#222222'
 progress_chars = 60
 PLAYLIST_HEIGHT = 500
 
-MAIN_FONT: str = 'Iosevka Nerd Custom Terminal'
+MAIN_FONT: str = 'Iosevka NF SNV Sans Fixed'
 PROGRESS_FONT: str = 'Terminus'
 
 main_font: Font = (MAIN_FONT, fontsize)

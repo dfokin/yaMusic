@@ -11,7 +11,7 @@ HI_RES              : str = 'ﳍ'
 
 MODE_ICONS          : Dict[str, str] ={
     MODE_PLAYLIST:  '',
-    MODE_RADIO:     '📻',
+    MODE_RADIO:     '露',
 }
 
 
@@ -53,7 +53,6 @@ KEY_EXIT            : int = 24
 KEY_PLAYLIST        : int = 33
 KEY_SETTINGS        : int = 39
 KEY_LIKE            : int = 46
-KEY_VIS             : int = 55
 KEY_SKIP            : int = 57
 KEY_MUTE            : int = 58
 KEY_PLAY            : int = 65
@@ -87,4 +86,3 @@ APP_NAME            : str = 'yaMusic'
 CONFIG_NAME         : str = f'{APP_NAME}.yaml'
 DEFAULT_MODE        : str = MODE_RADIO
 DEFAULT_SOURCE      : str = 'onyourwave'
-VIS_SCRIPT          : str = 'cava-vis'

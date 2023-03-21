@@ -13,7 +13,7 @@ class SpinnerLabel(Label):
         self.phases: str = phases
         self._running: bool = False
         self._pause: str = '⏸'
-        self._stop: str = '■'
+        self._stop: str = '⏹'
         self._phase: int = 0
         self._job: str = None
         self.grid(row=0, column=0, pady=padding)
