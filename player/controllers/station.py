@@ -24,9 +24,6 @@ ClientAsync.notice_displayed = True
 _LOGGER = logging.getLogger(__name__)
 
 
-YANDEX_APP_NAME: str = 'desktop_win-home-playlist_of_the_day-playlist-default'
-MY_CODEC: str = 'mp3'
-
 MY_API_RETRIES: int = 3
 MY_API_RETRY_DELAY: int = 0.3
 MY_API_TIMEOUT: float = 2.0

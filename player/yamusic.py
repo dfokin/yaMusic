@@ -5,6 +5,7 @@ from typing import Optional, List, Tuple
 from aioprocessing import AioManager, AioQueue, AioProcess
 from yandex_music import Restrictions, RotorSettings, StationResult
 
+from player import gst
 import player.config as cfg
 import player.constants as const
 from player.controllers.station import StationController, StationControllerError
@@ -27,13 +28,13 @@ class YaPlayer:
     """
     def __init__(self, ui_event_queue: AioQueue):
         self._dashboard: AioManager = AioManager().dict({
-            const.ATTR_STATE: None,
-            const.ATTR_DURATION: None,
-            const.ATTR_POSITION: None,
-            const.ATTR_VOLUME: None,
-            const.ATTR_TITLE: None,
-            const.ATTR_ERROR: None,
-            const.ATTR_URI: None
+            gst.DASH_STATE: None,
+            gst.DASH_DURATION: None,
+            gst.DASH_POSITION: None,
+            gst.DASH_VOLUME: None,
+            gst.DASH_TITLE: None,
+            gst.DASH_ERROR: None,
+            gst.DASH_URI: None
         })
         self.mode: str = cfg.get_key('mode', default=const.DEFAULT_MODE)
         self._command_queue: AioQueue = AioQueue()
@@ -82,7 +83,7 @@ class YaPlayer:
             await self._controller.shutdown(played=self.position)
             del self._controller
         if self._gstreamer.pid:                                                 # pylint: disable=no-member
-            await self._gs_command(const.CMD_SHUTDOWN)
+            await self._gs_command(gst.CMD_SHUTDOWN)
             await self._gstreamer.coro_join()                                   # pylint: disable=no-member
             del self._gstreamer
 
@@ -119,7 +120,7 @@ class YaPlayer:
             raise YaPlayerError(f'Cannot tune: {exc}')                         # pylint: disable=raise-missing-from
         await self._set_title(str(track))
         await self._enqueue(track.uri)
-        await self._gs_command(const.CMD_SKIP)
+        await self._gs_command(gst.CMD_SKIP_NEXT)
         return True
 
 
@@ -145,7 +146,7 @@ class YaPlayer:
             return
         await self._set_title(str(track))
         await self._enqueue(track.uri)
-        await self._gs_command(const.CMD_SKIP)
+        await self._gs_command(gst.CMD_SKIP_NEXT)
 
     async def like_track(self) -> bool:
         """Add track to favorites"""
@@ -158,43 +159,43 @@ class YaPlayer:
 
     async def play(self):
         """Start to play media."""
-        await self._gs_command(const.CMD_PLAY)
+        await self._gs_command(gst.CMD_PLAY)
 
     async def pause(self):
         """Pause playback."""
-        await self._gs_command(const.CMD_PAUSE)
+        await self._gs_command(gst.CMD_PAUSE)
 
     async def stop(self):
         """Stop playback."""
-        await self._gs_command(const.CMD_STOP)
+        await self._gs_command(gst.CMD_STOP)
 
     async def play_again(self):
         """Skip 10% of media"""
-        await self._gs_command(const.CMD_AGAIN)
+        await self._gs_command(gst.CMD_AGAIN)
 
     async def skip_forward(self):
         """Skip 10% of media"""
-        await self._gs_command(const.CMD_SKIP_F)
+        await self._gs_command(gst.CMD_SKIP_F)
 
     async def skip_back(self):
         """Back 10% of media"""
-        await self._gs_command(const.CMD_SKIP_B)
+        await self._gs_command(gst.CMD_SKIP_B)
 
     async def set_volume(self, volume):
         """Set volume."""
-        await self._gs_command(const.CMD_SET_VOLUME, volume=volume)
+        await self._gs_command(gst.CMD_SET_VOLUME, volume=volume)
 
     @property
     def title(self) -> str:
         """Get track title tag."""
-        return self._dashboard[const.ATTR_TITLE]
+        return self._dashboard[gst.DASH_TITLE]
 
     @property
     def mode_state(self) -> str:
         """Get current player mode."""
         mode: str = const.MODE_ICONS[self.mode]
         if self._controller.high_res:
-            mode = f'{mode} {const.HI_RES}'
+            mode = f'{mode} {const.HI_RES_ICON}'
         if self.mode == const.MODE_RADIO:
             if self._controller and self._controller.tuned:
                 mode = f'{mode} {self._controller.source_name}'
@@ -208,37 +209,37 @@ class YaPlayer:
     @property
     def state(self) -> str:
         """Get state."""
-        return self._dashboard[const.ATTR_STATE]
+        return self._dashboard[gst.DASH_STATE]
 
     @property
     def duration(self):
         """Get duration."""
-        return self._dashboard[const.ATTR_DURATION]
+        return self._dashboard[gst.DASH_DURATION]
 
     @property
     def position(self) -> int:
         """Get position."""
-        return self._dashboard[const.ATTR_POSITION]
+        return self._dashboard[gst.DASH_POSITION]
 
     @property
     def uri(self) -> str:
         """Get URI."""
-        return self._dashboard[const.ATTR_URI]
+        return self._dashboard[gst.DASH_URI]
 
     @property
     def volume(self) -> float:
         """Get volume."""
-        return self._dashboard[const.ATTR_VOLUME]
+        return self._dashboard[gst.DASH_VOLUME]
 
     @property
     def error(self):
         """Get error."""
-        return self._dashboard[const.ATTR_ERROR]
+        return self._dashboard[gst.DASH_ERROR]
 
     @position.setter
     async def position(self, position):
         """Set position."""
-        await self._gs_command(const.CMD_SET_POSITION, position=position)
+        await self._gs_command(gst.CMD_SET_POSITION, position=position)
 
     def _save_state(self):
         cfg.set_key('mode', self.mode)
@@ -248,7 +249,7 @@ class YaPlayer:
         cfg.save()
 
     async def _set_title(self, title: str):
-        self._dashboard[const.ATTR_TITLE] = title
+        self._dashboard[gst.DASH_TITLE] = title
         await self._emit_tags_event()
 
     async def _enqueue(self, uri: str):
@@ -271,6 +272,6 @@ class YaPlayer:
 
     async def _emit_error(self, error: str):
         _LOGGER.error(error)
-        self._dashboard[const.ATTR_STATE] = const.STATE_ERR
-        self._dashboard[const.ATTR_ERROR] = error
+        self._dashboard[gst.DASH_STATE] = gst.STATE_ERR
+        self._dashboard[gst.DASH_ERROR] = error
         await self._emit_state_event()

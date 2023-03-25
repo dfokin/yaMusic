@@ -6,7 +6,7 @@ from functools import wraps
 import logging
 import os
 
-from player.constants import TRACK_LIKE, APP_NAME
+from player.constants import LIKE_ICON, APP_NAME
 
 def touch(path, mode=0o666, exist_ok=True):
     """Unix-like touch"""
@@ -103,7 +103,7 @@ class YaTrack:
         return f'{hour}::{minute:02}::{second:02}'
 
     def __str__(self) -> str:
-        liked: str = f'{TRACK_LIKE} ' if self.is_liked else ''
+        liked: str = f'{LIKE_ICON} ' if self.is_liked else ''
         return f'{liked}{self.artist} - {self.title} ({self._str_duration()})'
 
 

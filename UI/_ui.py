@@ -16,7 +16,7 @@ from player.yamusic import YaPlayer, YaPlayerError
 from ._display_frame import  DisplayFrame
 from ._display_frame._progress_pane import ProgressPane, ProgressLabel, SpinnerLabel, VolumeLabel
 from ._main_frame import MainFrame
-from ._styling import build_styles
+from ._styling import build_styles, APP_HEIGHT, APP_WIDTH
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,9 +36,6 @@ class UI(tk.Tk):
         self._progress_task: asyncio.Task = None
         self._status_task: asyncio.Task = None
 
-        self.minsize(1060, 180)
-        self.resizable(False, False)
-        # self.maxsize(2000, 700)
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -97,9 +94,8 @@ class UI(tk.Tk):
         _LOGGER.debug('UI Loop exit')
         self.shutdown.set_result(True)
 
-
-    def _resize_event(self, event: tk.Event) -> None:
-        _LOGGER.debug('New size: %dx%d', event.width, event.height)
+    def _resize_event(self, _) -> None:
+        self.geometry(f'{APP_WIDTH}x{APP_HEIGHT}')
 
     def _keypress_event(self, event: tk.Event) -> None:
         self._ui_events.put({"type": const.TYPE_KEY, "keycode": event.keycode})         #pylint: disable=no-member
@@ -158,7 +154,7 @@ class UI(tk.Tk):
         _LOGGER.debug('keycode="%s"', keycode)
         if keycode == const.KEY_LIKE:
             if await self._player.like_track():
-                self._set_title(f'{const.TRACK_LIKE} {self._player.title}')
+                self._set_title(f'{const.LIKE_ICON} {self._player.title}')
         elif keycode == const.KEY_SKIP:
             await self._player.skip()
         elif keycode == const.KEY_FWD:

@@ -9,6 +9,9 @@ padding = 10
 bgcolor = '#875F00'
 fgcolor = '#222222'
 progress_chars = 60
+
+APP_WIDTH              : int = 1060
+APP_HEIGHT             : int = 180
 PLAYLIST_HEIGHT = 500
 
 MAIN_FONT: str = 'Iosevka NF SNV Sans Fixed'
