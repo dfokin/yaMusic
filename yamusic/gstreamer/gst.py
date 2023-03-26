@@ -10,7 +10,7 @@ import gi                                           # pylint: disable=import-err
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib, Gst                 # pylint: disable=import-error,wrong-import-position
 
-from constants.events import TYPE_ATF, TYPE_STATE   # pylint: disable=wrong-import-position
+from constants.events import TYPE_ATF, TYPE_STATE, TYPE_REPEAT   # pylint: disable=wrong-import-position
 
 # GstPlayer states
 STATE_READY         : str = 'ready'
@@ -25,6 +25,7 @@ CMD_PLAY            : str = 'play'
 CMD_PAUSE           : str = 'pause'
 CMD_STOP            : str = 'stop'
 CMD_AGAIN           : str = 'play_again'
+CMD_REPEAT          : str = 'toggle_repeat'
 CMD_SKIP_NEXT       : str = 'skip_next'
 CMD_SKIP_FW         : str = 'skip_forward'
 CMD_SKIP_BW         : str = 'skip_back'
@@ -32,20 +33,22 @@ CMD_SET_POSITION    : str = 'set_position'
 CMD_SET_VOLUME      : str = 'set_volume'
 
 # GstPlayer dashboard attributes
-DASH_STATE          : str = 'state'
-DASH_VOLUME         : str = 'volume'
-DASH_POSITION       : str = 'position'
 DASH_DURATION       : str = 'duration'
-DASH_URI            : str = 'uri'
 DASH_ERROR          : str = 'error'
+DASH_POSITION       : str = 'position'
+DASH_REPEAT         : str = 'repeat'
+DASH_STATE          : str = 'state'
+DASH_URI            : str = 'uri'
+DASH_VOLUME         : str = 'volume'
 
 DASHBOARD           : Dict[str, str] = {
-    DASH_STATE: None,
     DASH_DURATION: None,
-    DASH_POSITION: None,
-    DASH_VOLUME: None,
     DASH_ERROR: None,
-    DASH_URI: None
+    DASH_POSITION: None,
+    DASH_REPEAT: False,
+    DASH_STATE: None,
+    DASH_URI: None,
+    DASH_VOLUME: None,
 }
 
 # Playbin properties and constants
@@ -87,6 +90,7 @@ class GstPlayer:
         self._dashboard: AioManager = dashboard
 
         self._atf_sent: bool = False
+        self._repeat: bool = False
 
         # Create gst playbin and set event callbacks
         Gst.init(None)
@@ -179,8 +183,15 @@ class GstPlayer:
         """Start from the beginning."""
         self.set_position(0)
 
+    def toggle_repeat(self) -> None:
+        """Toggle repeat of current track."""
+        self._set_repeat(not self._repeat)
+
     def skip_next(self) -> None:
         """Skip to the next media."""
+        if self._repeat:
+            self._set_repeat(False)
+            self._on_atf(None)
         self._set_playbin_state(Gst.State.READY)
 
     def skip_forward(self) -> None:
@@ -229,6 +240,12 @@ class GstPlayer:
 
         return current
 
+    def _set_repeat(self, val: bool) -> None:
+        self._repeat = val
+        self._dashboard[DASH_REPEAT] = self._repeat
+        self._emit_repeat_event()
+        _LOGGER.debug('Repeat: %s.', 'enabled' if self._repeat else 'disabled')
+
     def _get_media_duration(self) -> float:
         """Get media duration."""
         duration = 0.0
@@ -250,16 +267,19 @@ class GstPlayer:
 
     def _dequeue_next_media(self) -> None:
         """Get next uri from media queue and set it as next uri in the playbin"""
-        try:
-            uri: str = self._media_queue.get(False)
-        except Empty:
-            return
-        _LOGGER.debug('Next track is %s.', uri)
+        if not self._repeat:
+            try:
+                uri: str = self._media_queue.get(False)
+            except Empty:
+                return
+            self._dashboard[DASH_URI] = uri
+            self._dashboard[DASH_POSITION] = 0
+            self._dashboard[DASH_DURATION] = 0
+            self._playbin.set_property(_PROP_URI, uri)
+            _LOGGER.debug('Dequeued %s.', self._playbin.get_property(_PROP_URI))
+        else:
+            self.play_again()
         self._atf_sent = False
-        self._dashboard[DASH_URI] = uri
-        self._dashboard[DASH_POSITION] = 0
-        self._dashboard[DASH_DURATION] = 0
-        self._playbin.set_property(_PROP_URI, uri)
         if self._state == Gst.State.READY:
             self._set_playbin_state(Gst.State.PLAYING)
 
@@ -274,6 +294,9 @@ class GstPlayer:
 
     def _emit_state_event(self) -> None:
         self._ui_event_queue.put({'type': TYPE_STATE})
+
+    def _emit_repeat_event(self) -> None:
+        self._ui_event_queue.put({'type': TYPE_REPEAT})
 
     def _emit_atf_event(self) -> None:
         if not self._atf_sent:
@@ -306,8 +329,11 @@ class GstPlayer:
 
     # Pipeline events handlers
     def _on_atf(self, stream: Gst.Stream) -> None:                              # pylint: disable=unused-argument
-        _LOGGER.debug('Track about to finish.')
-        self._emit_atf_event()
+        _LOGGER.debug('Track %s about to finish.', self._playbin.get_property(_PROP_URI))
+        if not self._repeat:
+            self._emit_atf_event()
+            return
+        _LOGGER.debug('Repeating.')
 
     def _on_error(self, bus: Gst.Bus, message: Gst.Message) -> None:            # pylint: disable=unused-argument
         error, debug = message.parse_error()

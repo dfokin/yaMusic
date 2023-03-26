@@ -6,6 +6,7 @@ from constants.player import MODE_PLAYLIST, MODE_RADIO
 KEY_ESCAPE          : int = 9   # Esc
 KEY_ZERO            : int = 19  # 0
 KEY_EXIT            : int = 24  # q
+KEY_REPEAT          : int = 27  # r
 KEY_PLAYLIST        : int = 33  # p
 KEY_SETTINGS        : int = 39  # s
 KEY_LIKE            : int = 46  # l
@@ -20,6 +21,7 @@ KEY_VOLDOWN         : int = 116 # arrow_down
 # Icons
 HI_RES_ICON             : str = 'ﳍ'
 LIKE_ICON               : str = '♥'
+REPEAT_ICON             : str = '累'
 MODE_ICONS              : Dict[str, str] ={
     MODE_PLAYLIST:  '',
     MODE_RADIO:     '露',

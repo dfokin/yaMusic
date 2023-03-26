@@ -103,7 +103,7 @@ class YaPlayer:
         """Set settings for active controller"""
         await self._emit_status_event("Applying new settings...")
         try:
-            if settings[0] == self._controller._playlist_id:
+            if settings[0] == self._controller.source_id:
                 return await self._controller.apply_source_settings(settings[1])
             return await self._switch_source(settings)
         except ControllerError as exc:
@@ -137,14 +137,15 @@ class YaPlayer:
 
     async def skip(self):
         """Skip current track and play next."""
-        await self._emit_status_event("Requesting track...")
-        try:
-            track: YaTrack = await self._controller.get_next_track(played=self.position)
-        except ControllerError as exc:
-            await self._emit_error(f'Cannot retrieve track: {exc}.')
-            return
-        await self._enqueue(track.uri)
-        await self._set_current(track)
+        if not self.repeat_state:
+            await self._emit_status_event("Requesting track...")
+            try:
+                track: YaTrack = await self._controller.get_next_track(played=self.position)
+            except ControllerError as exc:
+                await self._emit_error(f'Cannot retrieve track: {exc}.')
+                return
+            await self._enqueue(track.uri)
+            await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
 
     async def like_track(self) -> bool:
@@ -170,8 +171,12 @@ class YaPlayer:
         await self._gs_command(gst.CMD_STOP)
 
     async def play_again(self):
-        """Skip 10% of media"""
+        """Start playback from the beginnong"""
         await self._gs_command(gst.CMD_AGAIN)
+
+    async def repeat(self):
+        """Toggle continuous playback of current track"""
+        await self._gs_command(gst.CMD_REPEAT)
 
     async def skip_forward(self):
         """Skip 10% of media"""
@@ -191,6 +196,11 @@ class YaPlayer:
         return self._controller.high_res
 
     @property
+    def repeat_state(self) -> bool:
+        """Get repeat state of GstPlayer"""
+        return self._dashboard[gst.DASH_REPEAT]
+
+    @property
     def source_name(self) -> str:
         """Get the name of underlying controller's current source"""
         return self._controller.source_name
@@ -198,7 +208,7 @@ class YaPlayer:
     @property
     def source_id(self) -> str:
         """Get ID of underlying controller's current source"""
-        return self._controller._playlist_id
+        return self._controller.source_id
 
     @property
     def state(self) -> str:

@@ -127,12 +127,22 @@ class UI(tk.Tk):
         mode = f'{mode} {self._player.source_name}'
         return mode
 
+    def _player_mode(self) -> str:
+        """Get current player mode."""
+        mode: str = const.MODE_ICONS[self._player.mode]
+        if self._player.high_res:
+            mode = f'{mode} {const.HI_RES_ICON}'
+        if self._player.repeat_state:
+            mode = f'{mode} {const.REPEAT_ICON}'
+        return mode
+
 
     def _set_status(self, status: str = '') -> None:
         mode: str = ''
         if self._player:
-            mode = self._player_mode_state()
-        self._display_frame.set_status(f'{mode} {status}')
+            mode = self._player_mode()
+        self._mode_source.set_mode(mode)
+        self._mode_source.set_status(status)
 
     def _set_volume_from_player(self):
         self._volume.set_volume(self._player.volume * 10)
@@ -160,6 +170,8 @@ class UI(tk.Tk):
             self._set_title(track=self._player.current_track)
         elif event_type == ev.TYPE_ATF:
             await self._player.get_next_track()
+        elif event_type == ev.TYPE_REPEAT:
+            self._mode_source.set_mode(self._player_mode())
         elif event_type == ev.TYPE_STATUS:
             await self._to_status(event.get('status', 'Unknown'))
         elif event_type == ev.TYPE_SOURCE_UPD:
@@ -178,6 +190,8 @@ class UI(tk.Tk):
             await self._player.skip_forward()
         elif keycode == const.KEY_ZERO:
             await self._player.play_again()
+        elif keycode == const.KEY_REPEAT:
+            await self._player.repeat()
         elif keycode == const.KEY_BACK:
             await self._player.skip_back()
         elif keycode == const.KEY_VOLUP:

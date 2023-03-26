@@ -109,3 +109,10 @@ class VolumeLabel(Label):
 
     def _update(self) -> None:
         self['text'] = self._scale[self.volume]
+
+class ModeLabel(Label):
+    """
+    Ordinary label, but with custom style
+    """
+    def __init__(self, *args, text: str = "", **kwargs):
+        super().__init__(*args,  text=f'{text}: ', style='ModeLabel.TLabel', **kwargs)

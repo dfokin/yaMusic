@@ -21,10 +21,15 @@ main_font: Font = (MAIN_FONT, fontsize)
 spinner_font: Font = (MAIN_FONT, fontsize)
 status_font: Font = (MAIN_FONT, fontsize-2)
 progress_font: Font = (PROGRESS_FONT, fontsize + 2)
+mode_font: Font = (PROGRESS_FONT, fontsize + 4)
 
 def build_styles(style: Style) -> None:
     """Build custom styles used in application UI"""
     style.configure('MainFrame.TFrame',
+        background=bgcolor,
+        )
+
+    style.configure('ModeSource.TFrame',
         background=bgcolor,
         )
 
@@ -73,6 +78,12 @@ def build_styles(style: Style) -> None:
         background=bgcolor,
         foreground=fgcolor,
         font=spinner_font,
+        )
+
+    style.configure('ModeLabel.TLabel',
+        background=bgcolor,
+        foreground=fgcolor,
+        font=mode_font,
         )
 
     style.configure('SettingsFrame.TLabelframe',
