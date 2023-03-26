@@ -3,9 +3,11 @@ from tkinter.ttk import  LabelFrame
 from typing import Tuple
 
 from aioprocessing import AioQueue
+from yandex_music import RotorSettings
 
-import player.constants as const
-from player.yamusic import YaPlayer, RotorSettings
+import constants.player as const
+import constants.events as ev
+from yamusic import YaPlayer
 
 from UI._styling import padding
 from ._controls import SettingsButton
@@ -19,9 +21,7 @@ class SettingsFrame(LabelFrame):
     """
     def __init__(
             self, queue: AioQueue, player: YaPlayer, *args, **kwargs) -> None:
-        super().__init__(
-            *args, style='SettingsFrame.TLabelframe',
-            text=f' {player.mode_state} ', **kwargs)
+        super().__init__(*args, style='SettingsFrame.TLabelframe', **kwargs)
         self._queue: AioQueue = queue
         self.grid_columnconfigure((0, 1), weight=1)
         self.grid_rowconfigure(0, weight=0)
@@ -37,19 +37,21 @@ class SettingsFrame(LabelFrame):
             ).grid(row=1, column=1, sticky='sew')
 
         self.grid(row=0, column=1, padx=padding, pady=padding, rowspan=2, sticky='NSEW')
-        self._pane.focus_set()
+        if hasattr(self, '_pane'):
+            self._pane.focus_set()
 
     def _apply_settings(self) -> None:
         settings: Tuple[str, RotorSettings] = self._pane.get_updated_settings()
         if settings:
-            self._queue.put({'type': const.TYPE_SOURCE_UPD, 'settings': settings})
+            self._queue.put({'type': ev.TYPE_SOURCE_UPD, 'settings': settings})
         self.hide()
 
     def hide(self) -> None:
         """Hide and destroy SettingsFrame and all underlying controls"""
-        self._pane.grid_forget()
-        self._pane.destroy()
-        self._pane = None
+        if hasattr(self, '_pane'):
+            self._pane.grid_forget()
+            self._pane.destroy()
+            self._pane = None
         self.grid_forget()
         self.master.settings_frame = None
         self.destroy()

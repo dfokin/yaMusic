@@ -1,79 +1,64 @@
 """STUB"""
 import asyncio
 import logging
-from random import random
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional
+
 from yandex_music import (
-    ClientAsync,
     Dashboard,
-    DownloadInfo,
     Restrictions,
     RotorSettings,
     Sequence,
     StationResult,
     StationTracksResult,
     Track,
+    Value,
     )
-from yandex_music.exceptions import YandexMusicError
-from player.helpers import aiohttp_retry, YaTrack
-import player.config as cfg
-from player import constants as const
 
-ClientAsync.notice_displayed = True
+from utils.config import get_key, get_station_settings, set_station_settings
+from utils.decorators import aiohttp_retry
+
+from .error import ControllerError
+from .source import (
+    RETRY_ARGS,
+    RETRY_KWARGS,
+    MY_API_TIMEOUT,
+    SourceController,
+    )
+from .track import YaTrack
 
 _LOGGER = logging.getLogger(__name__)
 
 
-MY_API_RETRIES: int = 3
-MY_API_RETRY_DELAY: int = 0.3
-MY_API_TIMEOUT: float = 2.0
+DEFAULT_RADIO_SOURCE    : str = 'onyourwave'
 
-
-
-logging.getLogger('yandex_music.client_async').setLevel(logging.WARNING)
-
-
-class StationControllerError(Exception):
-    """General Radio Controller error"""
-
-RETRY_ARGS = [
-    YandexMusicError,
-    StationControllerError,
-    ]
-RETRY_KWARGS = {
-    'num_tries': MY_API_RETRIES,
-    'timeout': MY_API_TIMEOUT,
-    'retry_delay': MY_API_RETRY_DELAY,
-    'logger': _LOGGER,
-    }
-
-class StationController:
+class StationController(SourceController):
     """
     Controls Yandex.Music radio station
     """
     def __init__(self):
-        self.high_res: bool = cfg.get_key('high_res', True)
-        self.source_id: str = cfg.get_key('source_id', default=const.DEFAULT_SOURCE)
-        self._token: str = cfg.get_key('token')
-        self._client: ClientAsync = None
-        self._sources: List[StationResult] = []
+        super().__init__()
+        self._station_id: str = get_key('radio_id', default=DEFAULT_RADIO_SOURCE)
+        self._stations: List[StationResult] = []
         self._source: StationResult = None
         self._batch: StationTracksResult = None
         self._batch_index: int = 0
-        self._current_play_id: str = None
-        self._current_track: Track = None
-        self._current_track_int: YaTrack = None
 
     async def init(self):
         """Initialize Yandex.Music client and populate list of available stations"""
-        self._client = ClientAsync(token=self._token)
-        try:
-            await self._client.init()
-        except YandexMusicError as exc:
-            self._client = None
-            raise StationControllerError(f'Cannot initialize client: {exc}')            # pylint: disable=raise-missing-from
-        self._sources = await self._get_station_list()
+        await super().init()
+        self._stations = await self._get_station_list()
         return self
+
+    async def shutdown(self, played:float=0):
+        """
+        Stop controller
+        """
+        if self._current_track:
+            await self._inform_playback_ended(
+                self._current_track, self._current_play_id, self._batch.batch_id, played=played)
+        if self._client:
+            del self._client
+        _LOGGER.debug('Shut down.')
 
     async def set_source(
             self, source_id: str=None,
@@ -91,7 +76,7 @@ class StationController:
             )
             self._cleanup_current_track()
         if not self._set_source(source_id or self.source_id):
-            raise StationControllerError(f'No such station: {self.source_id} in rotor\'s stations.')
+            raise ControllerError(f'No such station: {self.source_id} in rotor\'s stations.')
         if not await self.apply_source_settings(
             source_settings or self.get_source_settings(), force=True):
             _LOGGER.warning(
@@ -108,18 +93,6 @@ class StationController:
             )
 
         return self._current_track_int
-
-    async def shutdown(self, played:float=0):
-        """
-        Stop controller
-        """
-        if self._current_track:
-            await self._inform_playback_ended(
-                self._current_track, self._current_play_id, self._batch.batch_id, played=played)
-        if self._client:
-            del self._client
-        _LOGGER.debug('Shut down.')
-
 
     async def get_next_track(self, played:float=0) -> YaTrack:
         """
@@ -146,12 +119,6 @@ class StationController:
 
         return self._current_track_int
 
-    async def like_track(self) -> bool:
-        """
-        Add current track to favorites
-        """
-        return await self._send_track_user_likes_add(self._current_track.id)
-
     async def apply_source_settings(self, settings: RotorSettings, force: bool = False) -> bool:
         """
         Apply settings for current station and store them to current config
@@ -163,9 +130,9 @@ class StationController:
             'Apply %s\'s settings: {language="%s", diversity="%s", mood_energy="%s"}.', 
             self._source.station.id.tag,
             settings.language, settings.diversity, settings.mood_energy)
-        if await self._apply_radio_settings(self._station_id, settings):
+        if await self._apply_rotor_settings(self._station_id, settings):
             # Store settings to config
-            cfg.set_station_settings(
+            set_station_settings(
                 self.source_id,
                 {
                     'language': settings.language,
@@ -177,12 +144,43 @@ class StationController:
             return True
         return False
 
-    def get_sources_list(self) -> List[StationResult]:
+    def get_sources_list(self) -> List[Value]:
         """Return list of available stations"""
-        return self._sources
+        return [Value(name=s.station.name, value=s.station.id.tag) for s in self._stations]
 
     ### API wrappers
     # Informers
+    async def _inform_playback_started(self, track: Track, play_id: str, batch_id: str):
+        await self._inform_track_playback_started(track, play_id)
+        try:
+            await self._send_rotor_track_playback_started(track, batch_id)
+        except ControllerError:
+            pass
+        else:
+            _LOGGER.debug('Informed Rotor API about start of track %s.', track.id)
+
+    async def _inform_playback_ended(
+        self, track: Track, play_id: str, batch_id: str, played:float=0):
+        await self._inform_track_playback_ended(track, play_id, played=played)
+        try:
+            if played:
+                await self._send_rotor_track_playback_skipped(track, batch_id, played)
+            else:
+                await self._send_rotor_track_playback_ended(track, batch_id)
+        except ControllerError:
+            pass
+        else:
+            _LOGGER.debug('Informed Rotor API about stop of track %s.', track.id)
+
+    async def _inform_batch_started(self, batch_id: str):
+        try:
+            await self._send_rotor_batch_started(batch_id)
+        except ControllerError:
+            pass
+        else:
+            _LOGGER.debug('Informed Rotor API about start of batch %s.', batch_id)
+
+    # Rotor controls
     async def _get_station_list(self) -> List[StationResult]:
         return list(
             set(
@@ -190,40 +188,9 @@ class StationController:
             )
         )
 
-    async def _inform_playback_started(self, track: Track, play_id: str, batch_id: str):
-        try:
-            await self._send_track_playback_started(track, play_id)
-            await self._send_radio_track_playback_started(track, batch_id)
-        except StationControllerError:
-            pass
-        else:
-            _LOGGER.debug('Informed station about start of %s.', track.id)
-
-    async def _inform_playback_ended(
-        self, track: Track, play_id: str, batch_id: str, played:float=0):
-        try:
-            await self._send_track_playback_ended(track, play_id, played=played)
-            if played:
-                await self._send_radio_track_playback_skipped(track, batch_id, played)
-            else:
-                await self._send_radio_track_playback_ended(track, batch_id)
-        except StationControllerError:
-            pass
-        else:
-            _LOGGER.debug('Informed station about stop of %s.', track.id)
-
-    async def _inform_batch_started(self, batch_id: str):
-        try:
-            await self._send_radio_batch_started(batch_id)
-        except StationControllerError:
-            pass
-        else:
-            _LOGGER.debug('Informed station about start of batch %s.', batch_id)
-
-    # Rotor controls
     def _set_source(self, station_id: str) -> bool:
         result: StationResult
-        for result in self._sources:
+        for result in self._stations:
             if result.station.id.tag == station_id:
                 self._source = result
                 self.source_id = station_id
@@ -236,7 +203,7 @@ class StationController:
         asyncio.create_task(self._inform_batch_started(self._batch.batch_id))
 
     # Track controls
-    async def _setup_current_track(self) -> Track:
+    async def _setup_current_track(self) -> None:
         current_sequence: Sequence = self._batch.sequence[self._batch_index]
         self._current_track = await self._get_track(current_sequence.track.track_id)
         self._current_track_int = YaTrack(
@@ -247,19 +214,6 @@ class StationController:
             is_liked=current_sequence.liked
             )
         self._current_play_id = self._generate_play_id()
-
-    def _cleanup_current_track(self):
-        self._current_play_id = None
-        self._current_track = None
-        self._current_track_int = None
-
-    async def _get_track_url(self, track: Track, codec:str=MY_CODEC, high_res:bool=False) -> str:
-        dl_infos: List[DownloadInfo] = sorted(
-            [d for d in await self._get_track_download_infos(track) if d.codec == codec],
-            key=lambda x: x.bitrate_in_kbps
-        )
-        dl_info: DownloadInfo = dl_infos[-1] if high_res else dl_infos[0]
-        return await self._get_track_direct_link(dl_info)
 
     # Helpers
     @property
@@ -274,7 +228,14 @@ class StationController:
     @property
     def source_name(self) -> str:
         """Returns the name of currently tuned station"""
-        return self._source.station.name.strip()
+        if self._source:
+            return self._source.station.name.strip()
+        return 'None'
+
+    @property
+    def source_id(self) -> str:
+        """Returns ID of currently tuned station"""
+        return self._station_id
 
     def get_source_restrictions(self, station_id: str=None) -> Optional[Restrictions]:
         """
@@ -285,7 +246,7 @@ class StationController:
             if self._source and self._source.station.restrictions2:
                 return self._source.station.restrictions2
             return None
-        for s_r in self._sources:
+        for s_r in self._stations:
             if s_r.station.id.tag == station_id:
                 return s_r.station.restrictions2
         return None
@@ -307,26 +268,20 @@ class StationController:
         cfg_settings: RotorSettings = self._get_cfg_settings(station_id)
         if cfg_settings:
             return cfg_settings
-        for s_r in self._sources:
+        for s_r in self._stations:
             if s_r.station.id.tag == station_id:
                 return s_r.settings2
         return None
 
     @staticmethod
     def _get_cfg_settings(station_id: str) -> Optional[RotorSettings]:
-        cfg_settings: Dict = cfg.get_station_settings(station_id)
+        cfg_settings: Dict = get_station_settings(station_id)
         if cfg_settings:
             return RotorSettings(
                 language = cfg_settings.get('language', None),
                 diversity = cfg_settings.get('diversity', None),
                 mood_energy = cfg_settings.get('mood_energy', None))
         return None
-
-    @staticmethod
-    def _generate_play_id() -> str:
-        def randint() -> int:
-            return int(random() * 1000)
-        return f'{randint()}-{randint()}-{randint()}'
 
     def _is_current_settings(self, settings: RotorSettings):
         curr_settings: RotorSettings = self.get_source_settings()
@@ -351,14 +306,14 @@ class StationController:
         return await self._client.rotor_station_tracks(station_id, queue=queue, timeout=timeout)
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _apply_radio_settings(
+    async def _apply_rotor_settings(
         self, station_id: str, settings: RotorSettings, timeout: float=MY_API_TIMEOUT) -> bool:
         return await self._client.rotor_station_settings2(
             station_id, language=settings.language, diversity=settings.diversity,
             mood_energy=settings.mood_energy, timeout=timeout)
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_radio_batch_started(self, batch_id: str, timeout: float=MY_API_TIMEOUT):
+    async def _send_rotor_batch_started(self, batch_id: str, timeout: float=MY_API_TIMEOUT):
         await self._client.rotor_station_feedback_radio_started(
             station=self._station_id,
             from_=self._source.station.id_for_from,
@@ -367,7 +322,7 @@ class StationController:
         )
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_radio_track_playback_started(
+    async def _send_rotor_track_playback_started(
         self, track: Track, batch_id: str, timeout: float=MY_API_TIMEOUT):
         await self._client.rotor_station_feedback_track_started(
             station=self._station_id,
@@ -377,7 +332,7 @@ class StationController:
         )
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_radio_track_playback_skipped(
+    async def _send_rotor_track_playback_skipped(
         self, track: Track, batch_id: str, played: float, timeout: float=MY_API_TIMEOUT):
         await self._client.rotor_station_feedback_skip(
             station=self._station_id,
@@ -388,65 +343,12 @@ class StationController:
         )
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_radio_track_playback_ended(
+    async def _send_rotor_track_playback_ended(
         self, track: Track, batch_id: str, timeout: float=MY_API_TIMEOUT):
         await self._client.rotor_station_feedback_track_finished(
             station=self._station_id,
             track_id=track.id,
             total_played_seconds=track.duration_ms / 1000,
             batch_id=batch_id,
-            timeout=timeout
-        )
-
-
-    # Track controls
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _get_track(self, track_id:str, timeout: float=MY_API_TIMEOUT) -> Track:
-        tracks: List[Track] = await self._client.tracks([track_id], timeout=timeout)
-        return tracks[0]
-
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _get_track_download_infos(
-        self, track: Track, timeout: float=MY_API_TIMEOUT) -> List[DownloadInfo]:
-        return await track.get_download_info_async(timeout=timeout)
-
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _get_track_direct_link(
-        self, dl_info: DownloadInfo, timeout: float=MY_API_TIMEOUT) -> str:
-        return await dl_info.get_direct_link_async(timeout=timeout)
-
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_track_user_likes_add(
-        self, track_id: Union[str, int], timeout: float=MY_API_TIMEOUT) -> bool:
-        return await self._client.users_likes_tracks_add(track_id, timeout=timeout)
-
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_track_playback_started(
-        self, track: Track, play_id: str, timeout: float=MY_API_TIMEOUT):
-        total_seconds = track.duration_ms / 1000
-        await self._client.play_audio(
-            from_=YANDEX_APP_NAME,
-            track_id=track.id,
-            album_id=track.albums[0].id,
-            play_id=play_id,
-            track_length_seconds=int(total_seconds),
-            total_played_seconds=0,
-            end_position_seconds=total_seconds,
-            timeout=timeout
-        )
-
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _send_track_playback_ended(
-        self, track: Track, play_id: str, played: float = 0, timeout: float=MY_API_TIMEOUT):
-        played_seconds = played if played else track.duration_ms / 1000
-        total_seconds = track.duration_ms / 1000
-        await self._client.play_audio(
-            from_=YANDEX_APP_NAME,
-            track_id=track.id,
-            album_id=track.albums[0].id,
-            play_id=play_id,
-            track_length_seconds=int(total_seconds),
-            total_played_seconds=played_seconds,
-            end_position_seconds=total_seconds,
             timeout=timeout
         )

@@ -3,12 +3,12 @@ from tkinter import Event
 from tkinter.ttk import  Frame, LabelFrame, Label
 from typing import List, Optional, Tuple
 
-from yandex_music import Enum, Restrictions, RotorSettings, StationResult, Value
+from yandex_music import Enum, Restrictions, RotorSettings, Value
 
-import player.constants as const
-from player.yamusic import YaPlayer
+from yamusic import YaPlayer
 
 from UI._styling import padding, apply_custom_combo_styling
+from UI._constants import KEY_ESCAPE
 from ._controls import ValCombobox, ColonLabel
 
 class StationSettingsPane(Frame):
@@ -29,10 +29,7 @@ class StationSettingsPane(Frame):
         self.m_l: ColonLabel = None
         self._player = player
 
-        stations: List[Value] = []
-        s_r: List[StationResult] = player.get_sources_list()
-        for result in s_r:
-            stations.append(Value(name=result.station.name, value=result.station.id.tag))
+        stations: List[Value] = player.get_sources_list()
 
         # Station selector
         if stations:
@@ -69,7 +66,7 @@ class StationSettingsPane(Frame):
             self._build_settings_frame(restr, station_config)
 
     def _keypress_event(self, event: Event) -> None:
-        if event.keycode in [const.KEY_ESCAPE]:
+        if event.keycode in [KEY_ESCAPE]:
             self.master.hide()
 
     def get_updated_settings(self) -> Optional[Tuple[str, RotorSettings]]:

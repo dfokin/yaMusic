@@ -3,7 +3,7 @@
 from tkinter.ttk import Frame
 
 from aioprocessing import AioQueue
-from player.yamusic import YaPlayer
+from yamusic import YaPlayer
 
 from ._display_frame import DisplayFrame
 from ._playlist_frame import PlaylistFrame
@@ -34,12 +34,12 @@ class MainFrame(Frame):
             self.playlist_frame.hide()
             self.playlist_frame = None
 
-    def toggle_settings(self, queue: AioQueue, player: YaPlayer) -> None:
+    def toggle_settings(self, queue: AioQueue, player: YaPlayer, **kwargs) -> None:
         """
         Toggle visibility of the SettingsFrame. 
         Content of the SettingsFrame depends on given mode and restrictions.
         """
         if not self.settings_frame:
-            self.settings_frame = SettingsFrame(queue, player, self)
+            self.settings_frame = SettingsFrame(queue, player, self, **kwargs)
         else:
             self.settings_frame.hide()

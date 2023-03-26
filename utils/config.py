@@ -1,14 +1,30 @@
 """Config file routines"""
-from os import makedirs
+import os
 from os.path import join, expanduser, exists, isdir, isfile
 from typing import Dict, Optional, Union, List
 
 import yaml
 
-from player.constants import APP_NAME, CONFIG_NAME
-from player.helpers import touch
+from constants.app import APP_NAME
 
 CONFIG: Dict = None
+CONFIG_NAME: str = f'{APP_NAME}.yaml'
+
+
+def _touch(path, mode=0o666, exist_ok=True):
+    """Unix-like touch"""
+    if exist_ok:
+        try:
+            os.utime(path, None)
+        except OSError:
+            pass
+        else:
+            return
+    flags = os.O_CREAT | os.O_WRONLY
+    if not exist_ok:
+        flags |= os.O_EXCL
+    with os.open(path, flags, mode):
+        pass
 
 class ConfigError(Exception):
     """General config error"""
@@ -21,7 +37,7 @@ if not exists(_XDG_CONFIG_DIR) or not isdir(_XDG_CONFIG_DIR):
 _CONFIG_DIR: str = join(_XDG_CONFIG_DIR, APP_NAME)
 
 if not exists(_CONFIG_DIR):
-    makedirs(_CONFIG_DIR)
+    os.makedirs(_CONFIG_DIR)
 
 if not isdir(_CONFIG_DIR):
     raise ConfigError(f'{_CONFIG_DIR} is not a directory!')
@@ -29,7 +45,7 @@ if not isdir(_CONFIG_DIR):
 _CONFIG_PATH: str = join(_CONFIG_DIR, CONFIG_NAME)
 
 if not exists(_CONFIG_PATH):
-    touch(_CONFIG_PATH, mode=0o600)
+    _touch(_CONFIG_PATH, mode=0o600)
 
 if not isfile(_CONFIG_PATH):
     raise ConfigError(f'{_CONFIG_PATH} is not a file!')
@@ -69,3 +85,11 @@ def set_station_settings(station_id: str, val: Dict) -> None:
     if not CONFIG['station_settings']:
         CONFIG['station_settings'] = {}
     CONFIG['station_settings'][station_id] = val
+
+__all__ = [
+    'save',
+    'get_key',
+    'set_key',
+    'get_station_settings',
+    'set_station_settings',
+]

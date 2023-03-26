@@ -3,15 +3,14 @@ Home of GstPlayer
 """
 import logging
 from queue import Empty
-from typing import List
+from typing import Dict, List
 
 from aioprocessing import AioManager, AioQueue
-import gi                                       # pylint: disable=import-error
+import gi                                           # pylint: disable=import-error
 gi.require_version('Gst', '1.0')
-from gi.repository import GLib, Gst             # pylint: disable=import-error,wrong-import-position
+from gi.repository import GLib, Gst                 # pylint: disable=import-error,wrong-import-position
 
-import player.constants as const                # pylint: disable=wrong-import-position
-
+from constants.events import TYPE_ATF, TYPE_STATE   # pylint: disable=wrong-import-position
 
 # GstPlayer states
 STATE_READY         : str = 'ready'
@@ -27,8 +26,8 @@ CMD_PAUSE           : str = 'pause'
 CMD_STOP            : str = 'stop'
 CMD_AGAIN           : str = 'play_again'
 CMD_SKIP_NEXT       : str = 'skip_next'
-CMD_SKIP_F          : str = 'skip_forward'
-CMD_SKIP_B          : str = 'skip_back'
+CMD_SKIP_FW         : str = 'skip_forward'
+CMD_SKIP_BW         : str = 'skip_back'
 CMD_SET_POSITION    : str = 'set_position'
 CMD_SET_VOLUME      : str = 'set_volume'
 
@@ -38,8 +37,16 @@ DASH_VOLUME         : str = 'volume'
 DASH_POSITION       : str = 'position'
 DASH_DURATION       : str = 'duration'
 DASH_URI            : str = 'uri'
-DASH_TITLE          : str = 'title'
 DASH_ERROR          : str = 'error'
+
+DASHBOARD           : Dict[str, str] = {
+    DASH_STATE: None,
+    DASH_DURATION: None,
+    DASH_POSITION: None,
+    DASH_VOLUME: None,
+    DASH_ERROR: None,
+    DASH_URI: None
+}
 
 # Playbin properties and constants
 _FORMAT_TIME        : Gst.Format = Gst.Format(Gst.Format.TIME)
@@ -266,11 +273,11 @@ class GstPlayer:
             raise _GstPlayerError(f'Unable to set the pipeline to the {state.name} state.')
 
     def _emit_state_event(self) -> None:
-        self._ui_event_queue.put(dict(type=const.TYPE_STATE))
+        self._ui_event_queue.put({'type': TYPE_STATE})
 
     def _emit_atf_event(self) -> None:
         if not self._atf_sent:
-            self._ui_event_queue.put(dict(type=const.TYPE_ATF))
+            self._ui_event_queue.put({'type': TYPE_ATF})
             self._atf_sent = True
 
     def _eos_handler(self):
