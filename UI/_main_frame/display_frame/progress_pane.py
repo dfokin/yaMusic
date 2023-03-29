@@ -1,9 +1,9 @@
 """STUB"""
 from tkinter.ttk import LabelFrame
 
-from UI._styling import progress_chars, padding
 
-from ._controls import SpinnerLabel, ProgressLabel, VolumeLabel
+from ...__utils.controls import SpinnerLabel, ProgressLabel, VolumeLabel
+from ...__utils.styling import progress_chars, padding
 
 class ProgressPane(LabelFrame):
     """Container for Spinner, Progress and Volume widgets, also displays current track nam"""

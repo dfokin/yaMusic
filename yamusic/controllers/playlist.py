@@ -173,7 +173,7 @@ class PlaylistController(SourceController):
                         self._playlist = await self._get_playlist_tracks(pl_short.value)
                 except ControllerError as err:
                     _LOGGER.error('Cannot retrieve playlist data: %s', err)
-                    raise ControllerError(f'Cannot retrieve playlist data: {err}')              # pylint: disable=raise-missing-from
+                    raise ControllerError(f'Cannot retrieve playlist data: {err}')                  # pylint: disable=raise-missing-from
                 self._playlist_name = pl_short.name
                 self._playlist_id = pl_short.value
                 return True

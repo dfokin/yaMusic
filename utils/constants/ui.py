@@ -1,6 +1,6 @@
 """UI constants"""
 from typing import Dict
-from constants.player import MODE_PLAYLIST, MODE_RADIO
+from utils.constants.player import MODE_PLAYLIST, MODE_RADIO
 
 # UI keycodes
 KEY_ESCAPE          : int = 9   # Esc

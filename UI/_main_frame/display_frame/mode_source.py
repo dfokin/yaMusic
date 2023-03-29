@@ -4,11 +4,10 @@ from typing import Any, List, Tuple
 
 from yandex_music import Value
 
-import constants.events as ev
+import utils.constants.events as ev
 
-from UI._styling import padding, apply_custom_combo_styling
-from UI._settings_frame._controls import ColonLabel
-from ._controls import ModeLabel, ValCombobox
+from ...__utils.controls import ColonLabel, ModeLabel, ValCombobox
+from ...__utils.styling import padding, apply_custom_combo_styling
 
 
 class ModeSourceState(Frame):

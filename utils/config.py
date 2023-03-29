@@ -5,7 +5,7 @@ from typing import Dict, Optional, Union, List
 
 import yaml
 
-from constants.app import APP_NAME
+from utils.constants.app import APP_NAME
 
 CONFIG: Dict = None
 CONFIG_NAME: str = f'{APP_NAME}.yaml'
@@ -56,7 +56,7 @@ try:
         if not CONFIG:
             CONFIG = {}
 except OSError as exc:
-    raise ConfigError(f'Failed to load config: {exc}')              # pylint: disable=raise-missing-from
+    raise ConfigError(f'Failed to load config: {exc}')                                              # pylint: disable=raise-missing-from
 
 def save() -> None:
     """Save current version of config"""
@@ -64,7 +64,7 @@ def save() -> None:
         with open(_CONFIG_PATH, 'w', encoding='utf-8') as outfile:
             outfile.write(yaml.dump(CONFIG))
     except OSError as err:
-        raise ConfigError(f'Failed to save config: {err}')          # pylint: disable=raise-missing-from
+        raise ConfigError(f'Failed to save config: {err}')                                          # pylint: disable=raise-missing-from
 
 def get_key(key: str, default=None) -> Optional[Union[int, float, str, Dict, List]]:
     """Get config value by key"""

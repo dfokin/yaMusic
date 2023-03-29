@@ -58,7 +58,7 @@ class SourceController:
             await self._client.init()
         except YandexMusicError as exc:
             self._client = None
-            raise ControllerError(f'Cannot initialize client: {exc}')            # pylint: disable=raise-missing-from
+            raise ControllerError(f'Cannot initialize client: {exc}')                               # pylint: disable=raise-missing-from
 
     async def shutdown(self):
         """

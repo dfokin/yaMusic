@@ -4,10 +4,12 @@ from typing import Optional
 
 from aioprocessing import AioQueue
 
-from UI._styling import padding
 from yamusic.player import YaPlayer
-from ._mode_source import ModeSourceState
-from ._progress_pane import ProgressPane
+
+from ...__utils.styling import padding
+
+from .mode_source import ModeSourceState
+from .progress_pane import ProgressPane
 
 
 class DisplayFrame(LabelFrame):

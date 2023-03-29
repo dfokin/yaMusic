@@ -5,11 +5,11 @@ from typing import Optional, Tuple
 
 from yandex_music import Enum, Restrictions, RotorSettings
 
-from constants.events import TYPE_KEY
-from UI._styling import padding, apply_custom_combo_styling
-from UI._constants import KEY_ESCAPE, KEY_SETTINGS
-from UI._display_frame._controls import ValCombobox
-from ._controls import ColonLabel
+from utils.constants.events import TYPE_KEY
+from utils.constants.ui import KEY_ESCAPE, KEY_SETTINGS
+
+from ...__utils.controls import ColonLabel, ValCombobox
+from ...__utils.styling import padding, apply_custom_combo_styling
 
 class StationSettingsPane(Frame):
     """

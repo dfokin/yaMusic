@@ -8,13 +8,14 @@ from yandex_music import RotorSettings
 
 from yamusic import YaPlayer
 
-import constants.player as const
-import constants.events as ev
+import utils.constants.events as ev
+import utils.constants.player as const
+import utils.constants.ui as const
 
-from UI._styling import padding
-import UI._constants as const
-from ._controls import SettingsButton
-from ._station import StationSettingsPane
+from ...__utils.styling import padding
+from ...__utils.controls import SettingsButton
+
+from .station_pane import StationSettingsPane
 
 
 class SettingsFrame(LabelFrame):

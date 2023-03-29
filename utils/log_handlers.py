@@ -2,7 +2,7 @@
 
 import logging
 
-from constants.app import APP_NAME
+from utils.constants.app import APP_NAME
 
 class ColorFormatter(logging.Formatter):
     """Colorize messages according to its severity"""

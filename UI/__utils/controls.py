@@ -1,14 +1,28 @@
-"""STUB"""
+"""Custom controls used in UI"""
 import logging
 from typing import Dict, Optional, List
-
-from tkinter.ttk import Combobox, Label
+from tkinter.ttk import Button, Combobox, Label
 
 from yandex_music import Value
-from UI._styling import main_font, padding
+
+from UI.__utils.styling import main_font, padding
 
 _LOGGER = logging.getLogger(__name__)
 
+class SettingsButton(Button):
+    """
+    Ordinary button, but may be pressed by hitting Enter key
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args,  style='SettingsButton.TButton', **kwargs)
+        self.bind('<Return>', lambda _: self.invoke())
+
+class ColonLabel(Label):
+    """
+    Ordinary label, but with custom style and colon with space is added after the text
+    """
+    def __init__(self, *args, text: str = "", **kwargs):
+        super().__init__(*args,  text=f'{text}: ', style='SettingsLabel.TLabel', **kwargs)
 
 class SpinnerLabel(Label):
     """

@@ -3,8 +3,10 @@ from tkinter.ttk import Frame, Scrollbar
 from tkinter import ACTIVE, Listbox, Variable, VERTICAL
 from typing import List
 
-import constants.events as ev
-from UI._styling import (
+import utils.constants.events as ev
+from yamusic import YaTrack
+
+from ...__utils.styling import (
     bgcolor,
     focuscolor,
     measure_main_font,
@@ -12,7 +14,6 @@ from UI._styling import (
     ListBoxStyle,
     PLAYLIST_HEIGHT
 )
-from yamusic import YaTrack
 
 class PlaylistFrame(Frame):
     """Displays list of tracks in player"""

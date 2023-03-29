@@ -5,9 +5,9 @@ from typing import Optional, List, Tuple
 from aioprocessing import AioManager, AioQueue, AioProcess
 from yandex_music import ClientAsync, Restrictions, RotorSettings, Value
 
-import constants.player as const
-import constants.events as ev
 import utils.config as cfg
+import utils.constants.player as const
+import utils.constants.events as ev
 
 from .controllers import (
     ControllerError,
@@ -54,7 +54,7 @@ class YaPlayer:
                 self._controller = await PlaylistController(self._client).init()
             return self
         except ControllerError as exc:
-            raise YaPlayerError(f'Cannot start controller: {exc}')               # pylint: disable=raise-missing-from
+            raise YaPlayerError(f'Cannot start controller: {exc}')                                  # pylint: disable=raise-missing-from
 
     async def start(self) -> YaTrack:
         """
@@ -63,15 +63,15 @@ class YaPlayer:
         try:
             track: YaTrack = await self._controller.set_source()
         except ControllerError as exc:
-            raise YaPlayerError(f'Cannot start: {exc}')                         # pylint: disable=raise-missing-from
+            raise YaPlayerError(f'Cannot start: {exc}')                                             # pylint: disable=raise-missing-from
         self._gstreamer = AioProcess(
             target=gst.GstPlayer(
                 self._dashboard, self._command_queue,
                 self._media_queue, self._ui_event_queue
                 ).run
             )
-        self._gstreamer.start()                                                 # pylint: disable=no-member
-        _LOGGER.debug('Started GstPlayer as PID %s', self._gstreamer.pid)       # pylint: disable=no-member
+        self._gstreamer.start()                                                                     # pylint: disable=no-member
+        _LOGGER.debug('Started GstPlayer as PID %s', self._gstreamer.pid)                           # pylint: disable=no-member
         await self._enqueue(track.uri)
         await self._set_current(track)
         await self.set_volume(cfg.get_key('volume', default=0.5))
@@ -85,9 +85,9 @@ class YaPlayer:
             del self._controller
         if self._client:
             del self._client
-        if self._gstreamer.pid:                                                 # pylint: disable=no-member
+        if self._gstreamer.pid:                                                                     # pylint: disable=no-member
             await self._gs_command(gst.CMD_SHUTDOWN)
-            await self._gstreamer.coro_join()                                   # pylint: disable=no-member
+            await self._gstreamer.coro_join()                                                       # pylint: disable=no-member
             del self._gstreamer
 
     async def switch_mode(self, mode: str):
@@ -104,7 +104,7 @@ class YaPlayer:
                 self._controller = await PlaylistController(self._client).init()
             track: YaTrack = await self._controller.set_source()
         except ControllerError as exc:
-            raise YaPlayerError(f'Cannot switch mode: {exc}')                   # pylint: disable=raise-missing-from
+            raise YaPlayerError(f'Cannot switch mode: {exc}')                                       # pylint: disable=raise-missing-from
         await self._enqueue(track.uri)
         await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
@@ -150,7 +150,7 @@ class YaPlayer:
             track: YaTrack = await self._controller.set_source(
                 source_id=s_id, source_settings=r_s, played=self.position)
         except ControllerError as exc:
-            raise YaPlayerError(f'Cannot tune: {exc}')                         # pylint: disable=raise-missing-from
+            raise YaPlayerError(f'Cannot tune: {exc}')                                              # pylint: disable=raise-missing-from
         await self._enqueue(track.uri)
         await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
@@ -221,7 +221,7 @@ class YaPlayer:
         await self._gs_command(gst.CMD_STOP)
 
     async def play_again(self):
-        """Start playback from the beginnong"""
+        """Start playback from the beginning"""
         await self._gs_command(gst.CMD_AGAIN)
 
     async def repeat(self):
@@ -312,11 +312,11 @@ class YaPlayer:
     async def _enqueue(self, uri: str):
         if uri.startswith("/"):
             uri = f'file://{uri}'
-        await self._media_queue.coro_put(uri)                   # pylint: disable=no-member
+        await self._media_queue.coro_put(uri)                                                       # pylint: disable=no-member
 
     async def _gs_command(self, name, **kwargs):
         """Queue a command to gstreamer process."""
-        await self._command_queue.coro_put((name, kwargs))      # pylint: disable=no-member
+        await self._command_queue.coro_put((name, kwargs))                                          # pylint: disable=no-member
 
     async def _emit_status_event(self, description: str):
         await self._ui_event_queue.coro_put(dict(type=ev.TYPE_STATUS, status=description))

@@ -6,11 +6,11 @@ from queue import Empty
 from typing import Dict, List
 
 from aioprocessing import AioManager, AioQueue
-import gi                                           # pylint: disable=import-error
+import gi                                                                                           # pylint: disable=import-error
 gi.require_version('Gst', '1.0')
-from gi.repository import GLib, Gst                 # pylint: disable=import-error,wrong-import-position
+from gi.repository import GLib, Gst                                                                 # pylint: disable=import-error,wrong-import-position
 
-from constants.events import TYPE_ATF, TYPE_STATE, TYPE_REPEAT   # pylint: disable=wrong-import-position
+from utils.constants.events import TYPE_ATF, TYPE_STATE, TYPE_REPEAT                                      # pylint: disable=wrong-import-position
 
 # GstPlayer states
 STATE_READY         : str = 'ready'
@@ -328,24 +328,24 @@ class GstPlayer:
         raise _GstPlayerError(f'No such visualizer: {name}!')
 
     # Pipeline events handlers
-    def _on_atf(self, stream: Gst.Stream) -> None:                              # pylint: disable=unused-argument
+    def _on_atf(self, stream: Gst.Stream) -> None:                                                  # pylint: disable=unused-argument
         _LOGGER.debug('Track %s about to finish.', self._playbin.get_property(_PROP_URI))
         if not self._repeat:
             self._emit_atf_event()
             return
         _LOGGER.debug('Repeating.')
 
-    def _on_error(self, bus: Gst.Bus, message: Gst.Message) -> None:            # pylint: disable=unused-argument
+    def _on_error(self, bus: Gst.Bus, message: Gst.Message) -> None:                                # pylint: disable=unused-argument
         error, debug = message.parse_error()
         _LOGGER.warning('Gstreamer error details: %s.', debug)
         self._error_handler(error)
 
-    def _on_eos(self, bus: Gst.Bus, message: Gst.Message) -> None:              # pylint: disable=unused-argument
+    def _on_eos(self, bus: Gst.Bus, message: Gst.Message) -> None:                                  # pylint: disable=unused-argument
         # Just change internal state, next media URI will be requested and
         # queued after ATF event and will be dequeued in the run loop.
         self._eos_handler()
 
-    def _on_state_changed(self, bus: Gst.Bus, message: Gst.Message) -> None:    # pylint: disable=unused-argument
+    def _on_state_changed(self, bus: Gst.Bus, message: Gst.Message) -> None:                        # pylint: disable=unused-argument
         if not message.src == self._playbin:
             return
         old, new, pending = message.parse_state_changed()

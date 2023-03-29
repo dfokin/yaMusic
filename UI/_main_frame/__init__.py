@@ -6,9 +6,9 @@ from typing import Optional
 from aioprocessing import AioQueue
 from yamusic import YaPlayer
 
-from ._display_frame import DisplayFrame
-from ._playlist_frame import PlaylistFrame
-from ._settings_frame import SettingsFrame
+from .display_frame import DisplayFrame
+from .playlist_frame import PlaylistFrame
+from .settings_frame import SettingsFrame
 
 
 class MainFrame(Frame):
