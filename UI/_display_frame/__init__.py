@@ -1,17 +1,38 @@
 """STUB"""
 from tkinter.ttk import LabelFrame
+from typing import Optional
+
+from aioprocessing import AioQueue
 
 from UI._styling import padding
-from._progress_pane import ProgressPane
+from yamusic.player import YaPlayer
+from ._mode_source import ModeSourceState
+from ._progress_pane import ProgressPane
 
 
 class DisplayFrame(LabelFrame):
-    """Container for ProgressFrame, also displays current status"""
+    """Container for ProgressFrame and source selector, also displays current status"""
     def __init__(self, master, **kwargs):
-        super().__init__(master, style='DisplayFrame.TLabelframe', labelanchor='sw', **kwargs)
-        self.grid(row=0, column=0, padx=padding, pady=padding, sticky='NSEW')
+        super().__init__(
+            master,
+            style='DisplayFrame.TLabelframe',
+            labelanchor='sw',
+            **kwargs)
+        self.mode_source: ModeSourceState = ModeSourceState(self)
+        self.config(labelwidget=self.mode_source)
         self.progress_frame = ProgressPane(self, padding=padding)
+        self.grid(row=0, column=0, padx=padding, pady=padding, sticky='NEWS')
 
-    def set_status(self, status: str) -> None:
-        """Set widget's label text"""
-        self['text'] = f' {status.strip()} '
+    @property
+    def player(self) -> Optional[YaPlayer]:
+        """Accessor for player instance"""
+        if hasattr(self.master, 'player'):
+            return self.master.player
+        return None
+
+    @property
+    def ui_queue(self) -> Optional[AioQueue]:
+        """Accessor for UI event queue"""
+        if hasattr(self.master, 'ui_queue'):
+            return self.master.ui_queue
+        return None

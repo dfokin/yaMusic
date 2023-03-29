@@ -5,7 +5,10 @@ import asyncio
 import logging
 import tkinter as tk
 from tkinter import ttk
-from typing import Dict
+from typing import Dict, Optional
+
+from ttkthemes import ThemedTk
+
 
 from aioprocessing import AioQueue
 
@@ -22,10 +25,10 @@ from ._styling import build_styles, APP_HEIGHT, APP_WIDTH
 _LOGGER = logging.getLogger(__name__)
 
 
-class UI(tk.Tk):
+class UI(ThemedTk):
     """
-    Application window with various player controls.
-    Under the hood runs async _ui_loop to poll UI events and react accordingly.
+    Application window with player controls.
+    Under the hood runs async _ui_loop to poll and react to UI events.
     When loop exits, shutdown future is set, signalling that UI is gone.
     """
     def __init__(self, *args, **kwargs):
@@ -37,6 +40,7 @@ class UI(tk.Tk):
         self._progress_task: asyncio.Task = None
         self._status_task: asyncio.Task = None
 
+        self.geometry(f'{APP_WIDTH}x{APP_HEIGHT}')
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -48,13 +52,15 @@ class UI(tk.Tk):
         self._spinner: SpinnerLabel = self._progress_frame.spinner
         self._progress: ProgressLabel = self._progress_frame.progress
         self._volume:VolumeLabel = self._progress_frame.volume
+        self._mode_source = self.main.display_frame.mode_source
 
         self._spinner.stop()
         self._progress.clean()
         self._set_title()
         self._set_status('Initializing UI...')
-        self.bind('<Key>', self._keypress_event)
+        self.main.bind('<Key>', self._keypress_event)
         self.bind('<Configure>', self._resize_event)
+        self.main.focus_force()
         asyncio.create_task(self._ui_loop())
 
     async def _ui_loop(self) -> None:
@@ -74,6 +80,9 @@ class UI(tk.Tk):
             if self._player:
                 await self._player.shutdown()
         else:
+            self._mode_source.update_sources()
+            if self.player.mode == const.MODE_PLAYLIST:
+                self.main.show_playlist()
             while True:
                 message: Dict[int, Dict] = await self._ui_events.coro_get()              #pylint: disable=no-member
                 if message['type'] == ev.TYPE_SHUTDOWN:
@@ -81,6 +90,20 @@ class UI(tk.Tk):
                 await self._handle_ui_event(message)
         finally:
             await self._shutdown()
+
+    @property
+    def player(self) -> Optional[YaPlayer]:
+        """Accessor for player instance"""
+        if hasattr(self, '_player'):
+            return self._player
+        return None
+
+    @property
+    def ui_queue(self) -> Optional[AioQueue]:
+        """Accessor for UI event queue"""
+        if hasattr(self, '_ui_events'):
+            return self._ui_events
+        return None
 
     async def _shutdown(self):
         await self._to_status('Shutting down UI...')
@@ -96,18 +119,33 @@ class UI(tk.Tk):
         self.shutdown.set_result(True)
 
     def _resize_event(self, _) -> None:
-        pass
-        # self.geometry(f'{APP_WIDTH}x{APP_HEIGHT}')
+        self.update_idletasks()
+        self.geometry(f'{self.main.winfo_reqwidth()}x{self.main.winfo_reqheight()}')
 
     def _keypress_event(self, event: tk.Event) -> None:
         self._ui_events.put({"type": ev.TYPE_KEY, "keycode": event.keycode})         #pylint: disable=no-member
 
-    def _toggle_playlist(self) -> None:
-        self.main.toggle_playlist()
+    async def _mode_playlist(self) -> None:
+        if self.player.mode == const.MODE_PLAYLIST:
+            self.main.toggle_playlist()
+            self._resize_event(False)
+            return
+        await self._player.switch_mode(const.MODE_PLAYLIST)
+        self._mode_source.update_sources()
+        self._mode_source.set_mode(self._player_mode())
+        self.main.show_playlist()
+        self._resize_event(False)
+
+    async def _mode_radio(self) -> None:
+        await self._player.switch_mode(const.MODE_RADIO)
+        self._mode_source.update_sources()
+        self._mode_source.set_mode(self._player_mode())
+        self.main.hide_playlist()
+        self._resize_event(False)
 
     def _toggle_settings(self) -> None:
-        self.main.toggle_settings(
-            self._ui_events, self._player, text=f' {self._player_mode_state()} ')
+        self.main.toggle_settings()
+        self._resize_event(False)
 
     def _set_title(self, track: YaTrack=None) -> None:
         title: str
@@ -119,14 +157,6 @@ class UI(tk.Tk):
         self.title(f'{APP_NAME} {title}')
         self._progress_frame.set_title(title)
 
-    def _player_mode_state(self) -> str:
-        """Get current player mode."""
-        mode: str = const.MODE_ICONS[self._player.mode]
-        if self._player.high_res:
-            mode = f'{mode} {const.HI_RES_ICON}'
-        mode = f'{mode} {self._player.source_name}'
-        return mode
-
     def _player_mode(self) -> str:
         """Get current player mode."""
         mode: str = const.MODE_ICONS[self._player.mode]
@@ -135,7 +165,6 @@ class UI(tk.Tk):
         if self._player.repeat_state:
             mode = f'{mode} {const.REPEAT_ICON}'
         return mode
-
 
     def _set_status(self, status: str = '') -> None:
         mode: str = ''
@@ -170,6 +199,8 @@ class UI(tk.Tk):
             self._set_title(track=self._player.current_track)
         elif event_type == ev.TYPE_ATF:
             await self._player.get_next_track()
+        elif event_type == ev.TYPE_SKIP_POS:
+            await self._player.skip_to_playlist_position(event.get('position'))
         elif event_type == ev.TYPE_REPEAT:
             self._mode_source.set_mode(self._player_mode())
         elif event_type == ev.TYPE_STATUS:
@@ -178,6 +209,7 @@ class UI(tk.Tk):
             if event.get('settings', None):
                 _LOGGER.debug('New player settings: %s', event['settings'])
                 await self._player.apply_source_settings(event['settings'])
+                self.main.update_playlist_content()
 
     async def _handle_keypress(self, keycode: int) -> None:
         _LOGGER.debug('keycode="%s"', keycode)
@@ -207,7 +239,9 @@ class UI(tk.Tk):
             elif state == STATE_PLAYING:
                 await self._player.pause()
         elif keycode == const.KEY_PLAYLIST:
-            self._toggle_playlist()
+            await self._mode_playlist()
+        elif keycode == const.KEY_RADIO:
+            await self._mode_radio()
         elif keycode == const.KEY_SETTINGS:
             self._toggle_settings()
         elif keycode == const.KEY_EXIT:
@@ -224,6 +258,7 @@ class UI(tk.Tk):
             if self._progress_task:
                 self._progress_task.cancel()
             self._progress_task = asyncio.create_task(self._update_progress())
+            self.main.update_playlist_position()
         elif state == STATE_PAUSED:
             self._spinner.pause()
             if self._progress_task:

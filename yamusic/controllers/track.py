@@ -25,3 +25,12 @@ class YaTrack:
 
     def __str__(self) -> str:
         return f'{self.artist} - {self.title} ({self._str_duration()})'
+
+    def fixed_width(self, width: int) -> str:
+        """Returns track description formatted to given string width"""
+        dur: str = f'({self._str_duration()})'
+        title: str = f'{self.artist} - {self.title}'
+        if len(title) + len(dur) <= width:
+            return f'{title: <{width-len(dur)}}{dur}'
+        title = f'{title[:(width-len(dur)-4)]}...'
+        return f'{title: <{width-len(dur)}}{dur}'

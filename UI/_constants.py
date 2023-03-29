@@ -6,10 +6,11 @@ from constants.player import MODE_PLAYLIST, MODE_RADIO
 KEY_ESCAPE          : int = 9   # Esc
 KEY_ZERO            : int = 19  # 0
 KEY_EXIT            : int = 24  # q
-KEY_REPEAT          : int = 27  # r
+KEY_RADIO           : int = 27  # r
 KEY_PLAYLIST        : int = 33  # p
 KEY_SETTINGS        : int = 39  # s
 KEY_LIKE            : int = 46  # l
+KEY_REPEAT          : int = 54  # c
 KEY_SKIP            : int = 57  # n
 KEY_MUTE            : int = 58  # m
 KEY_PLAY            : int = 65  # Spacebar
@@ -19,10 +20,11 @@ KEY_FWD             : int = 114 # arrow right
 KEY_VOLDOWN         : int = 116 # arrow_down
 
 # Icons
-HI_RES_ICON             : str = 'ﳍ'
-LIKE_ICON               : str = '♥'
-REPEAT_ICON             : str = '累'
-MODE_ICONS              : Dict[str, str] ={
-    MODE_PLAYLIST:  '',
-    MODE_RADIO:     '露',
+HI_RES_ICON         : str = 'ﳍ'
+LIKE_ICON           : str = '♥'
+REPEAT_ICON         : str = '累'
+
+MODE_ICONS          : Dict[str, str] ={
+    MODE_PLAYLIST   : '',
+    MODE_RADIO      : '露',
 }

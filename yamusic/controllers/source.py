@@ -6,6 +6,7 @@ from typing import List, Union
 from yandex_music import (
     ClientAsync,
     DownloadInfo,
+    RotorSettings,
     Track,
     Value,
     )
@@ -44,10 +45,9 @@ class SourceController:
     """
     Controls abstract Yandex.Music source
     """
-    def __init__(self):
+    def __init__(self, client: ClientAsync):
         self.high_res: bool = get_key('high_res', True)
-        self._token: str = get_key('token')
-        self._client: ClientAsync = ClientAsync(token=self._token)
+        self._client: ClientAsync = client
         self._current_play_id: str = None
         self._current_track: Track = None
         self._current_track_int: YaTrack = None
@@ -60,20 +60,27 @@ class SourceController:
             self._client = None
             raise ControllerError(f'Cannot initialize client: {exc}')            # pylint: disable=raise-missing-from
 
-    async def shutdown(self, played:float=0):
+    async def shutdown(self):
         """
         Stop controller
         """
         raise NotImplementedError
 
-    async def set_source(self) -> YaTrack:
+    async def set_source(self, source_id: str=None,
+            source_settings:RotorSettings=None, played:float=0) -> YaTrack:
         """
         Sets up current source 
         and returns first track from it
         """
         raise NotImplementedError
 
-    async def get_next_track(self, played:float=0) -> YaTrack:
+    async def apply_source_settings(self, settings: RotorSettings, force: bool=False) -> bool:
+        """
+        Apply settings for current source
+        """
+        raise NotImplementedError
+
+    async def get_next_track(self) -> YaTrack:
         """
         Retrieve next track from the source.
         in skipped param pass number seconds played
@@ -90,6 +97,25 @@ class SourceController:
         """Return list of available sources"""
         raise NotImplementedError
 
+    def get_short_playlist(self) -> List[YaTrack]:
+        """
+        Return list of internal representations of tracks in current playlist
+        download and user_likes info is not provided
+        """
+        raise NotImplementedError
+
+    def get_playlist_position(self) -> int:
+        """
+        Return index of current playlist
+        """
+        raise NotImplementedError
+
+    async def set_playlist_position(self, position: int, played:float=0) -> YaTrack:
+        """
+        Set index of current playlist
+        """
+        raise NotImplementedError
+
     @property
     def source_name(self) -> str:
         """Returns the name of current source"""
@@ -99,6 +125,13 @@ class SourceController:
     def source_id(self) -> str:
         """Returns ID of current source"""
         raise NotImplementedError
+
+    def _to_internal_short(self, track: Track) -> YaTrack:
+        return YaTrack(
+            title=track.title,
+            artist=",".join(track.artists_name()),
+            duration=int(track.duration_ms / 1000),
+            )
 
     ### API wrappers
     # Track controls

@@ -3,7 +3,7 @@ import logging
 from typing import Optional, List, Tuple
 
 from aioprocessing import AioManager, AioQueue, AioProcess
-from yandex_music import Restrictions, RotorSettings, Value
+from yandex_music import ClientAsync, Restrictions, RotorSettings, Value
 
 import constants.player as const
 import constants.events as ev
@@ -34,6 +34,7 @@ class YaPlayer:
     def __init__(self, ui_event_queue: AioQueue):
         self.mode: str = cfg.get_key('mode', default=const.DEFAULT_MODE)
         self.current_track: YaTrack = None
+        self._client: ClientAsync = ClientAsync(token=cfg.get_key('token'))
         self._dashboard: AioManager = AioManager().dict(gst.DASHBOARD)
         self._command_queue: AioQueue = AioQueue()
         self._media_queue: AioQueue = AioQueue()
@@ -48,9 +49,9 @@ class YaPlayer:
         await self._emit_status_event("Starting controller")
         try:
             if self.mode == const.MODE_RADIO:
-                self._controller = await StationController().init()
+                self._controller = await StationController(self._client).init()
             elif self.mode == const.MODE_PLAYLIST:
-                self._controller = await PlaylistController().init()
+                self._controller = await PlaylistController(self._client).init()
             return self
         except ControllerError as exc:
             raise YaPlayerError(f'Cannot start controller: {exc}')               # pylint: disable=raise-missing-from
@@ -82,10 +83,31 @@ class YaPlayer:
         if self._controller:
             await self._controller.shutdown(played=self.position)
             del self._controller
+        if self._client:
+            del self._client
         if self._gstreamer.pid:                                                 # pylint: disable=no-member
             await self._gs_command(gst.CMD_SHUTDOWN)
             await self._gstreamer.coro_join()                                   # pylint: disable=no-member
             del self._gstreamer
+
+    async def switch_mode(self, mode: str):
+        """Switch mode of player"""
+        if self.mode == mode:
+            return
+        self._save_state()
+        self.mode = mode
+        await self._controller.shutdown(played=self.position)
+        try:
+            if self.mode == const.MODE_RADIO:
+                self._controller = await StationController(self._client).init()
+            elif self.mode == const.MODE_PLAYLIST:
+                self._controller = await PlaylistController(self._client).init()
+            track: YaTrack = await self._controller.set_source()
+        except ControllerError as exc:
+            raise YaPlayerError(f'Cannot switch mode: {exc}')                   # pylint: disable=raise-missing-from
+        await self._enqueue(track.uri)
+        await self._set_current(track)
+        await self._gs_command(gst.CMD_SKIP_NEXT)
 
     def get_sources_list(self) -> Optional[List[Value]]:
         """Get settings restrictions for active source"""
@@ -99,12 +121,23 @@ class YaPlayer:
         """Get settings for active source"""
         return self._controller.get_source_settings(station_id=station_id)
 
+    def get_short_playlist(self) -> List[YaTrack]:
+        """Get current playlist without download info"""
+        return self._controller.get_short_playlist()
+
+    def get_playlist_position(self) -> int:
+        """Get current playlist position"""
+        return self._controller.get_playlist_position()
+
     async def apply_source_settings(self, settings: Tuple[str, RotorSettings]) -> bool:
         """Set settings for active controller"""
         await self._emit_status_event("Applying new settings...")
         try:
             if settings[0] == self._controller.source_id:
-                return await self._controller.apply_source_settings(settings[1])
+                res: bool =  await self._controller.apply_source_settings(settings[1])
+                if res:
+                    self._save_state()
+                return res
             return await self._switch_source(settings)
         except ControllerError as exc:
             await self._emit_error(f'Cannot apply new settings: {exc}.')
@@ -121,6 +154,7 @@ class YaPlayer:
         await self._enqueue(track.uri)
         await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
+        self._save_state()
         return True
 
     async def get_next_track(self):
@@ -136,7 +170,7 @@ class YaPlayer:
         await self.play()
 
     async def skip(self):
-        """Skip current track and play next."""
+        """Skip to track and play next."""
         if not self.repeat_state:
             await self._emit_status_event("Requesting track...")
             try:
@@ -147,6 +181,22 @@ class YaPlayer:
             await self._enqueue(track.uri)
             await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
+
+    async def skip_to_playlist_position(self, position: int):
+        """Skip current track and play track at given playlist position."""
+        if self.mode != const.MODE_PLAYLIST:
+            return
+        await self._emit_status_event("Requesting track...")
+        try:
+            track: YaTrack = await self._controller.set_playlist_position(
+                position, played=self.position)
+        except ControllerError as exc:
+            await self._emit_error(f'Cannot skip to given position: {exc}.')
+            return
+        await self._enqueue(track.uri)
+        await self._set_current(track)
+        await self._gs_command(gst.CMD_SKIP_NEXT)
+
 
     async def like_track(self) -> bool:
         """Add track to favorites"""

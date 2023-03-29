@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Optional
 
 from yandex_music import (
+    ClientAsync,
     Dashboard,
     Restrictions,
     RotorSettings,
@@ -35,9 +36,9 @@ class StationController(SourceController):
     """
     Controls Yandex.Music radio station
     """
-    def __init__(self):
-        super().__init__()
-        self._station_id: str = get_key('radio_id', default=DEFAULT_RADIO_SOURCE)
+    def __init__(self, client: ClientAsync):
+        super().__init__(client)
+        self._source_id: str = get_key('radio_id', default=DEFAULT_RADIO_SOURCE)
         self._stations: List[StationResult] = []
         self._source: StationResult = None
         self._batch: StationTracksResult = None
@@ -81,7 +82,7 @@ class StationController(SourceController):
             source_settings or self.get_source_settings(), force=True):
             _LOGGER.warning(
                 'Failed to apply %s\'s settings.', self._source.station.id.tag)
-        _LOGGER.debug('Tuned to %s station.', self._station_id)
+        _LOGGER.debug('Tuned to %s station.', self.source_id)
 
         await self._start_new_batch()
         await self._setup_current_track()
@@ -93,6 +94,31 @@ class StationController(SourceController):
             )
 
         return self._current_track_int
+
+    async def apply_source_settings(self, settings: RotorSettings, force: bool=False) -> bool:
+        """
+        Apply settings for current station and store them to current config
+        """
+        # Do nothing if given settings are same as current or are not set
+        if not settings or (not force and self._is_current_settings(settings)):
+            return True
+        _LOGGER.debug(
+            'Apply %s\'s settings: {language="%s", diversity="%s", mood_energy="%s"}.', 
+            self._source.station.id.tag,
+            settings.language, settings.diversity, settings.mood_energy)
+        if await self._apply_rotor_settings(self._station_id, settings):
+            # Store settings to config
+            set_station_settings(
+                self.source_id,
+                {
+                    'language': settings.language,
+                    'diversity': settings.diversity,
+                    'mood_energy': settings.mood_energy,
+                })
+            if self._batch:
+                self._batch_index = len(self._batch.sequence)
+            return True
+        return False
 
     async def get_next_track(self, played:float=0) -> YaTrack:
         """
@@ -119,34 +145,27 @@ class StationController(SourceController):
 
         return self._current_track_int
 
-    async def apply_source_settings(self, settings: RotorSettings, force: bool = False) -> bool:
-        """
-        Apply settings for current station and store them to current config
-        """
-        # Do nothing if given settings are same as current source settings
-        if not force and self._is_current_settings(settings):
-            return True
-        _LOGGER.debug(
-            'Apply %s\'s settings: {language="%s", diversity="%s", mood_energy="%s"}.', 
-            self._source.station.id.tag,
-            settings.language, settings.diversity, settings.mood_energy)
-        if await self._apply_rotor_settings(self._station_id, settings):
-            # Store settings to config
-            set_station_settings(
-                self.source_id,
-                {
-                    'language': settings.language,
-                    'diversity': settings.diversity,
-                    'mood_energy': settings.mood_energy,
-                })
-            if self._batch:
-                self._batch_index = len(self._batch.sequence)
-            return True
-        return False
-
     def get_sources_list(self) -> List[Value]:
         """Return list of available stations"""
         return [Value(name=s.station.name, value=s.station.id.tag) for s in self._stations]
+
+    def get_short_playlist(self) -> List[YaTrack]:
+        """
+        Return empty list due to nature of radio
+        """
+        return []
+
+    def get_playlist_position(self) -> int:
+        """
+        Return 0 due to nature of radio
+        """
+        return 0
+
+    async def set_playlist_position(self, position: int, played:float=0) -> YaTrack:
+        """
+        Set index of current playlist
+        """
+        return None
 
     ### API wrappers
     # Informers
@@ -193,7 +212,7 @@ class StationController(SourceController):
         for result in self._stations:
             if result.station.id.tag == station_id:
                 self._source = result
-                self.source_id = station_id
+                self._source_id = station_id
                 return True
         return False
 
@@ -204,14 +223,14 @@ class StationController(SourceController):
 
     # Track controls
     async def _setup_current_track(self) -> None:
-        current_sequence: Sequence = self._batch.sequence[self._batch_index]
-        self._current_track = await self._get_track(current_sequence.track.track_id)
+        sequence_item: Sequence = self._batch.sequence[self._batch_index]
+        self._current_track = await self._get_track(sequence_item.track.track_id)
         self._current_track_int = YaTrack(
             title=self._current_track.title,
             artist=",".join(self._current_track.artists_name()),
             uri=await self._get_track_url(self._current_track, high_res=self.high_res),
             duration=int(self._current_track.duration_ms / 1000),
-            is_liked=current_sequence.liked
+            is_liked=sequence_item.liked
             )
         self._current_play_id = self._generate_play_id()
 
@@ -235,7 +254,7 @@ class StationController(SourceController):
     @property
     def source_id(self) -> str:
         """Returns ID of currently tuned station"""
-        return self._station_id
+        return self._source_id
 
     def get_source_restrictions(self, station_id: str=None) -> Optional[Restrictions]:
         """

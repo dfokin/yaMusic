@@ -54,4 +54,3 @@ class ProgressPane(LabelFrame):
             self.after_cancel(self._job)
             self._job = None
             self._window_pos = 0
-

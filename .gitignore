@@ -1,6 +1,7 @@
 # Local stuff
 _research/
 .vscode/
+*.code-workspace
 
 # Byte-compiled / optimized / DLL files
 .idea

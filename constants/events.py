@@ -10,6 +10,7 @@ TYPE_REPEAT         : int = 4
 TYPE_RESIZE         : int = 5
 TYPE_SOURCE_UPD     : int = 6
 TYPE_STATUS         : int = 7
+TYPE_SKIP_POS       : int = 8
 TYPE_SHUTDOWN       : int = 255
 
 TYPE_TO_STR :Dict[int, str] = {
@@ -18,6 +19,7 @@ TYPE_TO_STR :Dict[int, str] = {
     TYPE_REPEAT:        'TYPE_REPEAT',
     TYPE_RESIZE:        'TYPE_RESIZE',
     TYPE_SHUTDOWN:      'TYPE_SHUTDOWN',
+    TYPE_SKIP_POS:      'TYPE_SKIP_POS',
     TYPE_STATE:         'TYPE_STATE',
     TYPE_STATUS:        'TYPE_STATUS',
     TYPE_SOURCE_UPD:    'TYPE_SOURCE_UPD',

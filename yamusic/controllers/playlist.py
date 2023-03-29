@@ -1,11 +1,13 @@
 """STUB"""
 import asyncio
 import logging
-from typing import List, Union
+from typing import List
 
 from yandex_music import (
+    ClientAsync,
     TracksList,
     Playlist,
+    RotorSettings,
     Track,
     Value,
     )
@@ -31,8 +33,8 @@ class PlaylistController(SourceController):
     """
     Controls Yandex.Music playlist
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, client: ClientAsync):
+        super().__init__(client)
         self._playlist_id: str = get_key('playlist_id', default=DEFAULT_PLAYLIST_ID)
         self._playlists: List[Value] = []
         self._playlist: List[Track] = None
@@ -57,10 +59,13 @@ class PlaylistController(SourceController):
             del self._client
         _LOGGER.debug('Shut down.')
 
-    async def set_source(self, source_id: str=None, played:float=0) -> YaTrack:
+    async def set_source(self, source_id: str=None,
+            source_settings:RotorSettings=None, played:float=0) -> YaTrack:
         """
         Opens given playlist, and returns first track
         """
+        if not source_settings:
+            pass
         if self._playlist is not None:
             # Switching to another playlist
             asyncio.create_task(
@@ -68,6 +73,7 @@ class PlaylistController(SourceController):
                     self._current_track, self._current_play_id, played)
             )
             self._cleanup_current_track()
+            self._position = 0
         if not await self._fill_playlist(source_id or self._playlist_id):
             raise ControllerError(f'No such Id: {self._playlist_id} in user\'s playlists.')
         _LOGGER.debug('Opened playlist "%s".', self._playlist_name)
@@ -78,6 +84,12 @@ class PlaylistController(SourceController):
             self._inform_track_playback_started(self._current_track, self._current_play_id))
 
         return self._current_track_int
+
+    async def apply_source_settings(self, settings: RotorSettings, force: bool=False) -> bool:
+        """
+        Apply settings for current playlist and store them to current config
+        """
+        return True
 
     async def get_next_track(self, played:float=0) -> YaTrack:
         """
@@ -105,6 +117,41 @@ class PlaylistController(SourceController):
     def get_sources_list(self) -> List[Value]:
         """Return available playlists"""
         return self._playlists
+
+    def get_short_playlist(self) -> List[YaTrack]:
+        """
+        Return list of internal representations of tracks in current playlist
+        download and user_likes info is not provided
+        """
+        return [self._to_internal_short(t) for t in self._playlist]
+
+    def get_playlist_position(self) -> int:
+        """
+        Return position of current track in playlist
+        """
+        return self._position
+
+    async def set_playlist_position(self, position: int, played:float=0) -> YaTrack:
+        """
+        Set index of current playlist
+        """
+        if position  < 0 or position >= len(self._playlist):
+            raise ControllerError(f'Position {position} is out of playlist bounds.')
+        asyncio.create_task(
+            self._inform_track_playback_ended(
+                self._current_track, self._current_play_id, played=played
+                )
+            )
+        self._cleanup_current_track()
+
+        self._position = position
+
+        await self._setup_current_track()
+
+        asyncio.create_task(
+            self._inform_track_playback_started(self._current_track, self._current_play_id))
+
+        return self._current_track_int
 
     ### API wrappers
     # Playlist controls
@@ -140,7 +187,6 @@ class PlaylistController(SourceController):
             artist=",".join(self._current_track.artists_name()),
             uri=await self._get_track_url(self._current_track, high_res=self.high_res),
             duration=int(self._current_track.duration_ms / 1000),
-            is_liked=self._current_track
             )
         self._current_play_id = self._generate_play_id()
 
@@ -162,18 +208,13 @@ class PlaylistController(SourceController):
         return await self._client.users_playlists_list(timeout=timeout)
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
-    async def _get_playlist(self,
-                            kind: Union[List[Union[str, int]], str, int],
-                            timeout: float=MY_API_TIMEOUT) -> Playlist:
-        return await self._client.users_playlists(kind=kind, timeout=timeout)
-
-    @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
     async def _get_playlist_tracks(
         self, playlist_id: str, timeout: float=MY_API_TIMEOUT) -> List[Track]:
-        pl_full: Playlist = await self._get_playlist(playlist_id)
-        return await TracksList(
+        pl_full: Playlist = await self._client.users_playlists(kind=playlist_id, timeout=timeout)
+        tracks: TracksList = TracksList(
                 pl_full.owner.uid, pl_full.revision, pl_full.tracks, self._client
-            ).fetch_tracks_async(timeout=timeout)
+            )
+        return await tracks.fetch_tracks_async(timeout=timeout)
 
     @aiohttp_retry(*RETRY_ARGS, **RETRY_KWARGS)
     async def _get_liked_tracks(self, timeout: float=MY_API_TIMEOUT) -> List[Track]:

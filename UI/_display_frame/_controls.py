@@ -1,7 +1,13 @@
 """STUB"""
-from tkinter.ttk import Label
+import logging
+from typing import Dict, Optional, List
 
-from UI._styling import padding
+from tkinter.ttk import Combobox, Label
+
+from yandex_music import Value
+from UI._styling import main_font, padding
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SpinnerLabel(Label):
@@ -116,3 +122,39 @@ class ModeLabel(Label):
     """
     def __init__(self, *args, text: str = "", **kwargs):
         super().__init__(*args,  text=f'{text}: ', style='ModeLabel.TLabel', **kwargs)
+
+class ValCombobox(Combobox):
+    """
+    Combobox for List of yamusic Values: selects an option by name and returns its value.
+    Executes passed callback when selection is made.
+    """
+    def __init__(
+            self, master, values_list: List[Value],
+            selected_callback=None, preselect: str=None, **kwargs):
+        self._dict: Dict[str, str] = {val.name: val.value for val in values_list}
+        self._selected_callback = selected_callback
+        keys: List[str] = sorted(list(self._dict.keys()))
+        super().__init__(
+            master, values=keys,
+            style='ComboBox.TCombobox', font=main_font, state='readonly', **kwargs)
+        self.bind('<<ComboboxSelected>>', self._on_selected)
+        if preselect:
+            try:
+                self._preselect(preselect)
+            except ValueError:
+                _LOGGER.warning('ValCombobox: Cannot preselect value: %s', preselect)
+
+    def get(self) -> Optional[str]:
+        """
+        get value from embedded dict by selected key from Combobox
+        """
+        return self._dict.get(super().get(), None)
+
+    def _preselect(self, value: str) -> None:
+        name = [k for k, v in self._dict.items() if v == value][0]
+        self.current(list(self['values']).index(name))
+
+    def _on_selected(self, _):
+        self.selection_clear()
+        if self._selected_callback:
+            self._selected_callback(self.get())
