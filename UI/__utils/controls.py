@@ -1,6 +1,7 @@
 """Custom controls used in UI"""
 import logging
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List, Union
+from tkinter import Listbox, MULTIPLE, Variable
 from tkinter.ttk import Button, Combobox, Label
 
 from yandex_music import Value
@@ -172,3 +173,28 @@ class ValCombobox(Combobox):
         self.selection_clear()
         if self._selected_callback:
             self._selected_callback(self.get())
+
+class ValListbox(Listbox):
+    """
+    Listbox for List of yamusic Values: selects an option by name and returns its value.
+    Executes passed callback when selection is made.
+    """
+    def __init__(self, master, **kwargs):
+        self._dict: Dict[int, str] = {}
+        self._results_var = Variable()
+        super().__init__(master, listvariable=self._results_var, **kwargs)
+
+    def set_values(self, values_list: List[Value], icon: str=''):
+        self._results_var.set([])
+        if values_list:
+            self._dict = {values_list.index(val): val.value for val in values_list}
+            self._results_var.set([f'{icon} {val.name}' for val in values_list])
+
+    def selection_get(self) -> Optional[Union[str, List[str]]]:
+        """
+        get value from embedded dict by selected key from Combobox
+        """
+        indices = list(super().curselection())
+        if self['selectmode'] == MULTIPLE:
+            return [ self._dict.get(idx) for idx in indices]
+        return self._dict.get(indices[0])

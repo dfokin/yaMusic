@@ -15,6 +15,7 @@ import utils.constants.ui as const
 from ...__utils.styling import padding
 from ...__utils.controls import SettingsButton
 
+from .artist_pane import ArtistPane
 from .station_pane import StationSettingsPane
 
 
@@ -32,7 +33,10 @@ class SettingsFrame(LabelFrame):
         self.bind('<Key>', self._keypress_event)
 
         if self.master.player.mode == const.MODE_RADIO:
-            self._pane: StationSettingsPane = StationSettingsPane(self)
+            self.pane: StationSettingsPane = StationSettingsPane(self)
+        if self.master.player.mode == const.MODE_ARTIST:
+            self.pane: ArtistPane = ArtistPane(self)
+        self.pane.grid(padx=padding / 2, pady=padding / 2, row=0, columnspan=2)
 
         SettingsButton(
             self, text='Применить', command=self._apply_settings
@@ -44,7 +48,7 @@ class SettingsFrame(LabelFrame):
         self.grid(row=0, column=1, padx=(0, padding), pady=(0, padding), rowspan=2, sticky='NSEW')
         self.config(text=f' {self._mode_source()}: Настройки ')
         if hasattr(self, '_pane'):
-            self._pane.focus_set()
+            self.pane.focus_set()
 
     @property
     def player(self) -> Optional[YaPlayer]:
@@ -68,7 +72,7 @@ class SettingsFrame(LabelFrame):
         return mode
 
     def _apply_settings(self) -> None:
-        settings: Tuple[str, RotorSettings] = self._pane.get_updated_settings()
+        settings: Tuple[str, RotorSettings] = self.pane.get_updated_settings()
         if settings:
             self.master.ui_queue.put({'type': ev.TYPE_SOURCE_UPD, 'settings': settings})
         self.hide()
@@ -83,9 +87,9 @@ class SettingsFrame(LabelFrame):
     def hide(self) -> None:
         """Hide and destroy SettingsFrame and all underlying controls"""
         if hasattr(self, '_pane'):
-            self._pane.grid_forget()
-            self._pane.destroy()
-            self._pane = None
+            self.pane.grid_forget()
+            self.pane.destroy()
+            self.pane = None
         self.grid_forget()
         self.master.settings_frame = None
         self.destroy()

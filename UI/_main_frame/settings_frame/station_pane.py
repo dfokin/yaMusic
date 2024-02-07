@@ -37,7 +37,6 @@ class StationSettingsPane(Frame):
             self._build_settings_frame(restr, station_config)
 
         self.bind('<Key>', self._keypress_event)
-        self.grid(padx=padding / 2, pady=padding / 2, row=0, columnspan=2)
 
     def _keypress_event(self, event: Event) -> None:
         if event.keycode in [KEY_ESCAPE, KEY_SETTINGS]:

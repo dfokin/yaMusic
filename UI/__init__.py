@@ -15,7 +15,7 @@ import utils.constants.events as ev
 import utils.constants.ui as const
 from yamusic import YaPlayer, YaPlayerError, YaTrack, STATE_ERR, STATE_PAUSED, STATE_PLAYING
 
-from .__utils.styling import build_styles, APP_HEIGHT, APP_WIDTH
+from .__utils.styling import build_styles
 from ._main_frame import MainFrame
 from ._main_frame.display_frame import  DisplayFrame
 from ._main_frame.display_frame.progress_pane import (
@@ -43,7 +43,7 @@ class _UI(ThemedTk):
         self._progress_task: asyncio.Task = None
         self._status_task: asyncio.Task = None
 
-        self.geometry(f'{APP_WIDTH}x{APP_HEIGHT}')
+        # self.geometry(f'{APP_WIDTH}x{APP_HEIGHT}')
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
@@ -74,8 +74,6 @@ class _UI(ThemedTk):
         self._status_task = asyncio.create_task(self._show_status_task())
         try:
             self._player = await YaPlayer(self._ui_events).init()
-            await self._player.start()
-            self._set_volume_from_player()
         except YaPlayerError as exc:
             msg: str = 'Cannot start player: %s. Shutting down.', str(exc)
             self._to_status(msg)
@@ -84,8 +82,16 @@ class _UI(ThemedTk):
                 await self._player.shutdown()
         else:
             self._mode_source.update_sources()
+            if self.player.mode == const.MODE_RADIO:
+                await self._player.start()
+                self._set_volume_from_player()
             if self.player.mode == const.MODE_PLAYLIST:
+                await self._player.start()
+                self._set_volume_from_player()
                 self.main.show_playlist()
+            elif self.player.mode == const.MODE_ARTIST:
+                self.main.show_playlist()
+                self.main.show_settings()
             while True:
                 message: Dict[int, Dict] = await self._ui_events.coro_get()              #pylint: disable=no-member
                 if message['type'] == ev.TYPE_SHUTDOWN:
@@ -145,6 +151,15 @@ class _UI(ThemedTk):
         self._mode_source.update_sources()
         self._mode_source.set_mode(self._player_mode())
         self.main.hide_playlist()
+        self.update_idletasks()
+        self._resize_event(False)
+
+    async def _mode_artist(self) -> None:
+        await self._player.switch_mode(const.MODE_ARTIST)
+        self._mode_source.update_sources()
+        self._mode_source.set_mode(self._player_mode())
+        self.main.show_playlist()
+        self.main.show_settings()
         self.update_idletasks()
         self._resize_event(False)
 
@@ -211,11 +226,18 @@ class _UI(ThemedTk):
             self._mode_source.set_mode(self._player_mode())
         elif event_type == ev.TYPE_STATUS:
             await self._to_status(event.get('status', 'Unknown'))
+        elif event_type in [ev.TYPE_QUERY_ALBUMS, ev.TYPE_QUERY_ARTISTS, ev.TYPE_QUERY_TRACKS]:
+            self._player.query_artist(
+                type=event_type,
+                query=event['query'],
+                callback=self.main.settings_frame.pane.fill_results_list
+            )
         elif event_type == ev.TYPE_SOURCE_UPD:
             if event.get('settings', None):
                 _LOGGER.debug('New player settings: %s', event['settings'])
                 await self._player.apply_source_settings(event['settings'])
                 self.main.update_playlist_content()
+                self._set_volume_from_player()
 
     async def _handle_keypress(self, keycode: int) -> None:
         _LOGGER.debug('keycode="%s"', keycode)
@@ -246,6 +268,8 @@ class _UI(ThemedTk):
                 await self._player.pause()
         elif keycode == const.KEY_PLAYLIST:
             await self._mode_playlist()
+        elif keycode == const.KEY_ARTIST:
+            await self._mode_artist()
         elif keycode == const.KEY_RADIO:
             await self._mode_radio()
         elif keycode == const.KEY_SETTINGS:

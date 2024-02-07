@@ -93,6 +93,10 @@ class SourceController:
         """
         return await self._send_track_user_likes_add(self._current_track.id)
 
+    def query(self, **kwargs) -> List[Value]:
+        """Perform API queries"""
+        raise NotImplementedError
+
     def get_sources_list(self) -> List[Value]:
         """Return list of available sources"""
         raise NotImplementedError

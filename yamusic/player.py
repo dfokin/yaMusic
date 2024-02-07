@@ -10,6 +10,7 @@ import utils.constants.player as const
 import utils.constants.events as ev
 
 from .controllers import (
+    ArtistController,
     ControllerError,
     SourceController,
     PlaylistController,
@@ -52,6 +53,8 @@ class YaPlayer:
                 self._controller = await StationController(self._client).init()
             elif self.mode == const.MODE_PLAYLIST:
                 self._controller = await PlaylistController(self._client).init()
+            elif self.mode == const.MODE_ARTIST:
+                self._controller = await ArtistController(self._client).init()
             return self
         except ControllerError as exc:
             raise YaPlayerError(f'Cannot start controller: {exc}')                                  # pylint: disable=raise-missing-from
@@ -85,7 +88,7 @@ class YaPlayer:
             del self._controller
         if self._client:
             del self._client
-        if self._gstreamer.pid:                                                                     # pylint: disable=no-member
+        if self._gstreamer and self._gstreamer.pid:                                                 # pylint: disable=no-member
             await self._gs_command(gst.CMD_SHUTDOWN)
             await self._gstreamer.coro_join()                                                       # pylint: disable=no-member
             del self._gstreamer
@@ -102,7 +105,11 @@ class YaPlayer:
                 self._controller = await StationController(self._client).init()
             elif self.mode == const.MODE_PLAYLIST:
                 self._controller = await PlaylistController(self._client).init()
+            elif self.mode == const.MODE_ARTIST:
+                self._controller = await ArtistController(self._client).init()
             track: YaTrack = await self._controller.set_source()
+            if not track:
+                return
         except ControllerError as exc:
             raise YaPlayerError(f'Cannot switch mode: {exc}')                                       # pylint: disable=raise-missing-from
         await self._enqueue(track.uri)
@@ -129,11 +136,22 @@ class YaPlayer:
         """Get current playlist position"""
         return self._controller.get_playlist_position()
 
+    def query_artist(self, **kwargs) -> None:
+        """Query artist controller for content"""
+        if self.mode == const.MODE_ARTIST:
+            return self._controller.query(**kwargs)
+
     async def apply_source_settings(self, settings: Tuple[str, RotorSettings]) -> bool:
         """Set settings for active controller"""
         await self._emit_status_event("Applying new settings...")
         try:
             if settings[0] == self._controller.source_id:
+                if self.mode == const.MODE_ARTIST:
+                    if not self._gstreamer:
+                        await self.start()
+                        self._save_state()
+                        return True
+                    return await self._switch_source(settings)
                 res: bool =  await self._controller.apply_source_settings(settings[1])
                 if res:
                     self._save_state()
@@ -303,6 +321,8 @@ class YaPlayer:
             cfg.set_key('radio_id', self._controller.source_id)
         elif self.mode == const.MODE_PLAYLIST:
             cfg.set_key('playlist_id', self._controller.source_id)
+        elif self.mode == const.MODE_ARTIST:
+            cfg.set_key('artist_id', self._controller.source_id)
         cfg.save()
 
     async def _set_current(self, track: YaTrack):

@@ -1,13 +1,9 @@
 """UI styling helpers"""
-from tkinter import SOLID, SINGLE
+from tkinter import SOLID, SINGLE, BROWSE
 from tkinter.font import Font
 from tkinter.ttk import Style
 
 from typing import Dict, Tuple, Union
-
-APP_WIDTH       :int = 1070
-APP_HEIGHT      :int = 200
-PLAYLIST_HEIGHT :int = int(APP_HEIGHT * 2.5)
 
 PROGRESS_FONT   :str = 'Terminus'
 MAIN_FONT       :str = 'Iosevka NF SNV Sans Fixed'
@@ -45,6 +41,23 @@ def build_styles(style: Style) -> None:
         borderwidth=0,
         bordercolor=fgcolor,
         relief=SOLID,
+    )
+
+    style.configure('Search.TEntry',
+        insertwidth=3,
+        borderwidth=2,
+        selectborderwidth=0,
+        fieldbackground=bgcolor,
+        lightcolor=fgcolor,
+        insertbackground=fgcolor,
+        foreground=fgcolor,
+        selectforeground=bgcolor,
+        selectbackground=fgcolor,
+        exportselection=0,
+        relief=SOLID,
+    )
+    style.map('Search.TEntry',
+        selectforeground=[('!active', '!focus', bgcolor), ('focus', bgcolor), ('active', bgcolor)],
     )
 
     style.configure('DisplayFrame.TLabelframe',
@@ -133,17 +146,6 @@ def build_styles(style: Style) -> None:
         font=progress_font
         )
 
-    style.configure('Vertical.TScrollbar',
-        background=fgcolor,
-        bordercolor=fgcolor,
-        lightcolor=fgcolor,
-        darkcolor=fgcolor,
-        arrowcolor=bgcolor,
-        troughcolor=bgcolor,
-        arrowsize=20,
-        relief='flat',
-    )
-
     style.configure('SettingsButton.TButton',
         font=main_font,
         anchor='center',
@@ -154,6 +156,45 @@ def build_styles(style: Style) -> None:
     style.map('SettingsButton.TButton',
         foreground=[('!active', '!focus', fgcolor), ('focus', bgcolor), ('active', bgcolor)],
         background=[('!active', '!focus', bgcolor), ('focus', fgcolor), ('active', fgcolor)],
+    )
+
+    style.configure('Vertical.TScrollbar',
+        highlightthickness=0,
+        borderwidth=2,
+        arrowsize=20,
+        relief='solid',
+    )
+    style.map('Vertical.TScrollbar',
+        arrowcolor= [
+            ('!active', '!disabled', fgcolor),
+            ('active', '!disabled', fgcolor),
+            ('disabled', bgcolor)
+        ],
+        bordercolor=[
+            ('!active', '!disabled', fgcolor),
+            ('active', '!disabled', fgcolor),
+            ('disabled', bgcolor)
+        ],
+        lightcolor= [
+            ('!active', '!disabled', fgcolor),
+            ('active', '!disabled', fgcolor),
+            ('disabled', fgcolor)
+        ],
+        darkcolor=  [
+            ('!active', '!disabled', fgcolor),
+            ('active', '!disabled', fgcolor),
+            ('disabled', fgcolor)
+        ],
+        troughcolor=[
+            ('!active', '!disabled', bgcolor),
+            ('active', '!disabled', bgcolor),
+            ('disabled', bgcolor)
+        ],
+        background= [
+            ('!active', '!disabled', bgcolor),
+            ('active', '!disabled', bgcolor),
+            ('disabled', bgcolor)
+        ],
     )
 
     style.configure('ComboBox.TCombobox',
@@ -221,6 +262,9 @@ ListBoxStyle: Dict[str, Union[int, str]] = dict(
     selectmode=SINGLE,
     exportselection=False,
 )
+
+ListBoxStyle_S: Dict[str, Union[int, str]] = ListBoxStyle
+ListBoxStyle_S['selectmode'] = BROWSE
 
 def apply_custom_combo_styling(obj) -> None:
     """Apply to object custom Combobox style"""

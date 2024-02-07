@@ -79,6 +79,14 @@ class MainFrame(Frame):
         if self.playlist_frame:
             self.playlist_frame.fill_playlist()
 
+    def show_settings(self, **kwargs) -> None:
+        """
+        Toggle visibility of the SettingsFrame. 
+        Content of the SettingsFrame depends on given mode and restrictions.
+        """
+        if not self.settings_frame:
+            self.settings_frame = SettingsFrame(self, **kwargs)
+
     def toggle_settings(self, **kwargs) -> None:
         """
         Toggle visibility of the SettingsFrame. 

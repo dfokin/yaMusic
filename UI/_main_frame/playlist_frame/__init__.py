@@ -12,21 +12,21 @@ from ...__utils.styling import (
     measure_main_font,
     padding,
     ListBoxStyle,
-    PLAYLIST_HEIGHT
 )
 
 class PlaylistFrame(Frame):
     """Displays list of tracks in player"""
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(
-            *args, style='PlaylistFrame.TLabelframe', height=PLAYLIST_HEIGHT, **kwargs)
+            *args, style='PlaylistFrame.TLabelframe', **kwargs)
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=0)
 
         self._list_var = Variable()
         self.list: Listbox = Listbox(self,listvariable=self._list_var, **ListBoxStyle)
-        scrollbar: Scrollbar = Scrollbar(self, orient=VERTICAL, command=self.list.yview)
+        scrollbar: Scrollbar = Scrollbar(
+            self, orient=VERTICAL, style='Vertical.TScrollbar', command=self.list.yview)
         self.list['yscrollcommand'] = scrollbar.set
         scrollbar.grid(row=0, column=1, padx=0, pady=0, sticky='NSEW')
         self.list.grid(row=0, column=0, padx=0, pady=0, sticky='NSEW')
