@@ -115,9 +115,8 @@ class GstPlayer:
         Gstreamer's main loop.
         Must be executed as a separate OS process to avoid GIL locks of Python's threads.
         """
-        self._set_playbin_state(Gst.State.READY)
-
         _LOGGER.debug('Gstreamer playbin is starting.')
+        self._set_playbin_state(Gst.State.READY)
         GLib.timeout_add(_PERIODIC_DELAY, self._periodic_task)
         self._loop.run()
 

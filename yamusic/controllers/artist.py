@@ -190,6 +190,8 @@ class ArtistController(SourceController):
         self._current_track_int = YaTrack(
             title=self._current_track.title,
             artist=",".join(self._current_track.artists_name()),
+            album=self._current_track.albums[0].title,
+            track_id=self._current_track.track_id,
             uri=await self._get_track_url(self._current_track, high_res=self.high_res),
             duration=int(self._current_track.duration_ms / 1000),
             )

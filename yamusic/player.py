@@ -8,6 +8,7 @@ from yandex_music import ClientAsync, Restrictions, RotorSettings, Value
 import utils.config as cfg
 import utils.constants.player as const
 import utils.constants.events as ev
+from utils.token import get_token
 
 from .controllers import (
     ArtistController,
@@ -33,9 +34,12 @@ class YaPlayer:
         Messages from player are passed to consumer via ui_event_queue.
     """
     def __init__(self, ui_event_queue: AioQueue):
+        token: str = get_token()
+        if not token:
+            raise YaPlayerError('Check token in config or gnome login keyring')
         self.mode: str = cfg.get_key('mode', default=const.DEFAULT_MODE)
         self.current_track: YaTrack = None
-        self._client: ClientAsync = ClientAsync(token=cfg.get_key('token'))
+        self._client: ClientAsync = ClientAsync(token=token)
         self._dashboard: AioManager = AioManager().dict(gst.DASHBOARD)
         self._command_queue: AioQueue = AioQueue()
         self._media_queue: AioQueue = AioQueue()

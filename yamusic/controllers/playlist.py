@@ -33,9 +33,9 @@ class PlaylistController(SourceController):
     """
     Controls Yandex.Music playlist
     """
-    def __init__(self, client: ClientAsync):
+    def __init__(self, client: ClientAsync, playlist_id: str = None):
         super().__init__(client)
-        self._playlist_id: str = get_key('playlist_id', default=DEFAULT_PLAYLIST_ID)
+        self._playlist_id: str = playlist_id or get_key('playlist_id', default=DEFAULT_PLAYLIST_ID)
         self._playlists: List[Value] = []
         self._playlist: List[Track] = None
         self._playlist_name: str = None
@@ -185,6 +185,8 @@ class PlaylistController(SourceController):
         self._current_track_int = YaTrack(
             title=self._current_track.title,
             artist=",".join(self._current_track.artists_name()),
+            album=self._current_track.albums[0].title,
+            track_id=self._current_track.track_id,
             uri=await self._get_track_url(self._current_track, high_res=self.high_res),
             duration=int(self._current_track.duration_ms / 1000),
             )

@@ -55,7 +55,7 @@ class SourceController:
     async def init(self):
         """Initialize Yandex.Music client and populate list of available stations"""
         try:
-            await self._client.init()
+            await self._client.init(timeout=MY_API_TIMEOUT)
         except YandexMusicError as exc:
             self._client = None
             raise ControllerError(f'Cannot initialize client: {exc}')                               # pylint: disable=raise-missing-from
@@ -134,6 +134,8 @@ class SourceController:
         return YaTrack(
             title=track.title,
             artist=",".join(track.artists_name()),
+            album=track.albums[0].title,
+            track_id=track.track_id,
             duration=int(track.duration_ms / 1000),
             )
 

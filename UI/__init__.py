@@ -11,6 +11,7 @@ from ttkthemes import ThemedTk
 from aioprocessing import AioQueue
 
 from utils.constants.app import APP_NAME
+import utils.config as cfg
 import utils.constants.events as ev
 import utils.constants.ui as const
 from yamusic import YaPlayer, YaPlayerError, YaTrack, STATE_ERR, STATE_PAUSED, STATE_PLAYING
@@ -75,8 +76,8 @@ class _UI(ThemedTk):
         try:
             self._player = await YaPlayer(self._ui_events).init()
         except YaPlayerError as exc:
-            msg: str = 'Cannot start player: %s. Shutting down.', str(exc)
-            self._to_status(msg)
+            msg: str = f'Cannot start player: {str(exc)}. Shutting down.'
+            await self._to_status(msg)
             _LOGGER.error(msg)
             if self._player:
                 await self._player.shutdown()
@@ -84,12 +85,13 @@ class _UI(ThemedTk):
             self._mode_source.update_sources()
             if self.player.mode == const.MODE_RADIO:
                 await self._player.start()
-                self._set_volume_from_player()
+                self._set_volume_from_config()
             if self.player.mode == const.MODE_PLAYLIST:
                 await self._player.start()
-                self._set_volume_from_player()
+                self._set_volume_from_config()
                 self.main.show_playlist()
             elif self.player.mode == const.MODE_ARTIST:
+                self._set_volume_from_config()
                 self.main.show_playlist()
                 self.main.show_settings()
             while True:
@@ -196,6 +198,9 @@ class _UI(ThemedTk):
 
     def _set_volume_from_player(self):
         self._volume.set_volume(self._player.volume * 10)
+
+    def _set_volume_from_config(self):
+        self._volume.set_volume(cfg.get_key('volume', default=0.5) * 10)
 
     async def _vol_up(self) -> None:
         self._volume.set_volume(self._volume.volume + 1)

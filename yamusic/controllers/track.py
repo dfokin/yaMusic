@@ -1,10 +1,12 @@
 """Internal track representation"""
 class YaTrack:
     """Internal representation of the track"""
-    def __init__(self, title:str=None, artist:str=None,
+    def __init__(self, title:str=None, artist:str=None, album:str=None, track_id:str=None,
                  uri:str=None, duration:int=0, is_liked:bool=None) -> None:
         self.title: str = title
         self.artist: str = artist
+        self.album: str = album
+        self.track_id: str = track_id
         self.uri: str = uri
         self.duration: int = duration
         self.is_liked: bool = is_liked

@@ -1,12 +1,19 @@
 yandex-music
+keyring
 aiotkinter
-aioprocessing
-gi
+aioprocessing[dill]
 PyYaml
 psutil
 ttkthemes
+requests
+aiofiles
+aiohttp
 
-sudo apt-get install python-gst-1.0 \
-    gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
-    gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
-    gstreamer1.0-tools
+#gi
+#sudo pacman -S gstreamer gst-python gst-libav gst-plugins-bad gst-plugins-base gst-plugins-good 
+#ln -s /usr/lib/python3.12/site-packages/gi ./gi
+
+#sudo apt-get install python-gst-1.0 \
+#    gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+#    gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
+#    gstreamer1.0-tools
