@@ -19,6 +19,7 @@ from .controllers import (
     YaTrack
     )
 from .gstreamer import gst
+from .mpris import MprisService, PlayState
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,8 +28,8 @@ class YaPlayerError(Exception):
 
 class YaPlayer:
     """
-        Wraps gstreamer process, who executes playback playbin, and yaMusic 
-        controller, who queries Yandex Music API for media URIs.
+        Wraps gstreamer process, which executes playback playbin, and yaMusic 
+        controller, which queries Yandex Music API for media URIs.
         Allows media uri queueing and comminicating with the process via IPC.
         Media URIs and player commands are sent to gstreamer via media and command queues
         Messages from player are passed to consumer via ui_event_queue.
@@ -46,12 +47,14 @@ class YaPlayer:
         self._ui_event_queue: AioQueue = ui_event_queue
         self._controller: SourceController = None
         self._gstreamer: AioProcess = None
+        self._mpris: MprisService = MprisService()
 
     async def init(self):
         """
         Initialize underlying controller.
         """
         await self._emit_status_event("Starting controller")
+        await self._mpris.init()
         try:
             if self.mode == const.MODE_RADIO:
                 self._controller = await StationController(self._client).init()
@@ -79,6 +82,8 @@ class YaPlayer:
             )
         self._gstreamer.start()                                                                     # pylint: disable=no-member
         _LOGGER.debug('Started GstPlayer as PID %s', self._gstreamer.pid)                           # pylint: disable=no-member
+        await self._mpris.register()
+        self._mpris.set_player_state(PlayState.PLAYING)
         await self._enqueue(track.uri)
         await self._set_current(track)
         await self.set_volume(cfg.get_key('volume', default=0.5))
@@ -96,6 +101,7 @@ class YaPlayer:
             await self._gs_command(gst.CMD_SHUTDOWN)
             await self._gstreamer.coro_join()                                                       # pylint: disable=no-member
             del self._gstreamer
+        await self._mpris.shutdown()
 
     async def switch_mode(self, mode: str):
         """Switch mode of player"""
@@ -203,6 +209,7 @@ class YaPlayer:
             await self._enqueue(track.uri)
             await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
+        self._mpris.set_player_state(PlayState.PLAYING)
 
     async def skip_to_playlist_position(self, position: int):
         """Skip current track and play track at given playlist position."""
@@ -218,7 +225,7 @@ class YaPlayer:
         await self._enqueue(track.uri)
         await self._set_current(track)
         await self._gs_command(gst.CMD_SKIP_NEXT)
-
+        self._mpris.set_player_state(PlayState.PLAYING)
 
     async def like_track(self) -> bool:
         """Add track to favorites"""
@@ -233,14 +240,17 @@ class YaPlayer:
     async def play(self):
         """Start to play media."""
         await self._gs_command(gst.CMD_PLAY)
+        self._mpris.set_player_state(PlayState.PLAYING)
 
     async def pause(self):
         """Pause playback."""
         await self._gs_command(gst.CMD_PAUSE)
+        self._mpris.set_player_state(PlayState.PAUSED)
 
     async def stop(self):
         """Stop playback."""
         await self._gs_command(gst.CMD_STOP)
+        self._mpris.set_player_state(PlayState.STOPPED)
 
     async def play_again(self):
         """Start playback from the beginning"""
@@ -332,6 +342,7 @@ class YaPlayer:
     async def _set_current(self, track: YaTrack):
         self.current_track = track
         await self._emit_tags_event()
+        self._mpris.set_player_metadata(track)
 
     async def _enqueue(self, uri: str):
         if uri.startswith("/"):
