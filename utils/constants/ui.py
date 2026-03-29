@@ -12,6 +12,7 @@ KEY_ARTIST          : int = 38  # a
 KEY_SETTINGS        : int = 39  # s
 KEY_LIKE            : int = 46  # l
 KEY_REPEAT          : int = 54  # c
+KEY_VIS             : int = 55  # v
 KEY_SKIP            : int = 57  # n
 KEY_MUTE            : int = 58  # m
 KEY_PLAY            : int = 65  # Spacebar

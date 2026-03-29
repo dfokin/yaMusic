@@ -3,10 +3,12 @@ Implements Yandex.Music client's UI
 """
 import asyncio
 import logging
+import subprocess
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, Optional
 
+import psutil
 from ttkthemes import ThemedTk
 from aioprocessing import AioQueue
 
@@ -41,6 +43,7 @@ class _UI(ThemedTk):
         self._ui_events: AioQueue = AioQueue()
         self._status_queue: asyncio.Queue = asyncio.Queue()
         self._player: YaPlayer = None
+        self._visualizer: subprocess.Popen = None
         self._progress_task: asyncio.Task = None
         self._status_task: asyncio.Task = None
 
@@ -124,6 +127,8 @@ class _UI(ThemedTk):
             self._progress_task.cancel()
         if self._status_task:
             self._status_task.cancel()
+        if self._visualizer:
+            self._kill_visualizer()
         self._ui_events = None
         self._status_queue = None
         _LOGGER.debug('UI Loop exit')
@@ -169,6 +174,25 @@ class _UI(ThemedTk):
         self.main.toggle_settings()
         self.update_idletasks()
         self._resize_event(False)
+
+    def _kill_visualizer(self) -> None:
+        _vis = psutil.Process(self._visualizer)
+        for child in _vis.children(recursive=True):
+            child.kill()
+        _vis.kill()
+        _LOGGER.debug('Terminated visualizer PID: %d', self._visualizer)
+        self._visualizer = None
+
+    def _toggle_visualizer(self) -> None:
+        vis_bin: str = cfg.get_key('visualizer')
+        if vis_bin is None:
+            return
+        if self._visualizer is None:
+            _vis = subprocess.Popen(vis_bin)
+            self._visualizer = _vis.pid
+            _LOGGER.debug('Started visualizer %s as PID %d', vis_bin, self._visualizer)
+        else:
+            self._kill_visualizer()
 
     def _set_title(self, track: YaTrack=None) -> None:
         title: str
@@ -279,6 +303,8 @@ class _UI(ThemedTk):
             await self._mode_radio()
         elif keycode == const.KEY_SETTINGS:
             self._toggle_settings()
+        elif keycode == const.KEY_VIS:
+            self._toggle_visualizer()
         elif keycode == const.KEY_EXIT:
             await self._ui_events.coro_put({"type": ev.TYPE_SHUTDOWN})               #pylint: disable=no-member
 

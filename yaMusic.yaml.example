@@ -7,4 +7,5 @@ station_settings:
     language: without-words
     mood_energy: calm
 token: ----
+visualizer: cava-vis
 volume: 1.0
