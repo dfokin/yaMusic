@@ -1,4 +1,6 @@
 """Internal track representation"""
+from json import dumps
+
 class YaTrack:
     """Internal representation of the track"""
     def __init__(self, title:str=None, artist:str=None, album:str=None, track_id:str=None,
@@ -27,6 +29,17 @@ class YaTrack:
 
     def __str__(self) -> str:
         return f'{self.artist} - {self.title} ({self._str_duration()})'
+
+    def to_json_str(self) -> str:
+        """JSON string representation"""
+        return dumps({
+            'title': self.title,
+            'artist': self.artist, 
+            'album': self.album,
+            'track_id': self.track_id, 
+            'uri': self.uri,
+            'duration': self.duration
+        })
 
     def fixed_width(self, width: int) -> str:
         """Returns track description formatted to given string width"""

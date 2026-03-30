@@ -4,13 +4,17 @@ Home of GstPlayer
 import logging
 from queue import Empty
 from typing import Dict, List
+from json import loads
 
 from aioprocessing import AioManager, AioQueue
 import gi                                                                                           # pylint: disable=import-error
 gi.require_version('Gst', '1.0')
 from gi.repository import GLib, Gst                                                                 # pylint: disable=import-error,wrong-import-position
 
-from utils.constants.events import TYPE_ATF, TYPE_STATE, TYPE_REPEAT                                      # pylint: disable=wrong-import-position
+from utils.constants.app import APP_NAME                                                            # pylint: disable=wrong-import-position                                 
+from utils.constants.events import TYPE_ATF, TYPE_STATE, TYPE_REPEAT                                # pylint: disable=wrong-import-position
+from yamusic.mpris import MprisService, PlayState                                                   # pylint: disable=wrong-import-position
+
 
 # GstPlayer states
 STATE_READY         : str = 'ready'
@@ -71,9 +75,10 @@ class _GstPlayerError(Exception):
     """General GstPlayer error"""
 
 
-class GstPlayer:
+class GstPlayer(object):
     """
     Wrapper around Gstreamer process executing playbin.
+    Incorporates MPRIS Server.
     All communications with Python are handled by AioQueues and AioManager.
     """
     def __init__(
@@ -82,7 +87,6 @@ class GstPlayer:
         command_queue: AioQueue,
         media_queue: AioQueue,
         ui_event_queue: AioQueue,
-        visualizer: str = None,
     ):
         self._ui_event_queue: AioQueue = ui_event_queue
         self._command_queue: AioQueue = command_queue
@@ -102,13 +106,10 @@ class GstPlayer:
         bus.connect('message::error', self._on_error)
         bus.connect('message::eos', self._on_eos)
         bus.connect('message::state-changed', self._on_state_changed)
-        if visualizer:
-            try:
-                self._set_visualizer(visualizer)
-            except _GstPlayerError as exc:
-                _LOGGER.warning('Cannot set visualizer: %s', exc)
         self._loop: GLib.MainLoop = GLib.MainLoop()
         _LOGGER.debug('Created Gstreamer playbin.')
+        self._mpris: MprisService = MprisService(APP_NAME)
+
 
     def run(self) -> None:
         """
@@ -159,6 +160,7 @@ class GstPlayer:
     # Pipeline commands that can be called via _command_queue
     def shutdown(self) -> None:
         """Shutdown process."""
+        self._mpris.shutdown()
         if self._state != Gst.State.NULL:
             self.stop()
         if self._loop.is_running():
@@ -168,15 +170,21 @@ class GstPlayer:
         """Change state to playing."""
         if self._state == Gst.State.PAUSED:
             self._set_playbin_state(Gst.State.PLAYING)
+            self._mpris.set_player_state(PlayState.PLAYING)
+
 
     def pause(self) -> None:
         """Change state to paused."""
         if self._state == Gst.State.PLAYING:
             self._set_playbin_state(Gst.State.PAUSED)
+            self._mpris.set_player_state(PlayState.PAUSED)
+
 
     def stop(self) -> None:
         """Stop pipeline."""
         self._set_playbin_state(Gst.State.READY)
+        self._mpris.set_player_state(PlayState.STOPPED)
+        # self._mpris.set_player_metadata(None)
 
     def play_again(self) -> None:
         """Start from the beginning."""
@@ -268,9 +276,11 @@ class GstPlayer:
         """Get next uri from media queue and set it as next uri in the playbin"""
         if not self._repeat:
             try:
-                uri: str = self._media_queue.get(False)
+                track: Dict = loads(self._media_queue.get(False))
+                uri: str = track.get('uri')
             except Empty:
                 return
+            self._mpris.set_player_metadata(track)
             self._dashboard[DASH_URI] = uri
             self._dashboard[DASH_POSITION] = 0
             self._dashboard[DASH_DURATION] = 0
@@ -281,6 +291,7 @@ class GstPlayer:
         self._atf_sent = False
         if self._state == Gst.State.READY:
             self._set_playbin_state(Gst.State.PLAYING)
+            self._mpris.set_player_state(PlayState.PLAYING)
 
     def _set_own_state(self, state: str, emit: bool = True) -> None:
         self._dashboard[DASH_STATE] = state

@@ -39,7 +39,6 @@ class _UI(ThemedTk):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, className=APP_NAME, **kwargs)
-        self.shutdown: asyncio.Future = asyncio.Future()
         self._ui_events: AioQueue = AioQueue()
         self._status_queue: asyncio.Queue = asyncio.Queue()
         self._player: YaPlayer = None
@@ -68,9 +67,8 @@ class _UI(ThemedTk):
         self.main.bind('<Key>', self._keypress_event)
         self.bind('<Configure>', self._resize_event)
         self.main.focus_force()
-        asyncio.create_task(self._ui_loop())
 
-    async def _ui_loop(self) -> None:
+    async def ui_loop(self) -> None:
         """
         Main UI loop:
         Create and start YaMusic player, poll and handle UI events
@@ -121,18 +119,19 @@ class _UI(ThemedTk):
 
     async def _shutdown(self):
         await self._to_status('Shutting down UI...')
-        if self._player:
-            await self._player.shutdown()
         if self._progress_task:
             self._progress_task.cancel()
+            await self._progress_task
         if self._status_task:
             self._status_task.cancel()
+            await self._status_task
         if self._visualizer:
             self._kill_visualizer()
+        if self._player:
+            await self._player.shutdown()
         self._ui_events = None
         self._status_queue = None
         _LOGGER.debug('UI Loop exit')
-        self.shutdown.set_result(True)
 
     def _resize_event(self, _) -> None:
         self.geometry(f'{self.main.winfo_reqwidth()}x{self.main.winfo_reqheight()}')
@@ -359,9 +358,9 @@ class _UI(ThemedTk):
 
 
 async def run_ui() -> None:
-    """Run UI until its shutdown"""
+    """Run UI """
     gui: _UI = _UI()
-    await gui.shutdown
+    await gui.ui_loop()
     gui.destroy()
 
 __all__ = [
